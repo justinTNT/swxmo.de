@@ -1,38 +1,57 @@
-
 var net = require('net');
 var http = require('http');
 var express = require('express');
-var swxmo = require('./swxmode');
+var temptools = require('./temptools');
 
 var webserver_app;
 var proxies = {};
 
 
-function NotFound(msg){
-  this.name = 'NotFound';
-  Error.call(this, msg);
-  Error.captureStackTrace(this, arguments.callee);
+/*
+ * configureAppEnv - setup some basic app functionality,
+ * ---------------
+ * configure templates; setup serving of browser files (scripts, css, favicon)
+ * and ensuring that ajax pages get a basic skeleton.
+ */
+function configureAppEnv(e) {
+
+	temptools.configureTemplates(e);
+
+	e.app.get(/\/$/, function(req, res){				// this makes sure that ajax pages serve up the skeleton
+		e.respond(req, res, e.basetemps);
+	});
+	e.app.configure(function(){						// and this serves up some browser scripts, css, etc
+		e.app.use('/browser/', express.static(e.dir + '/browser/'));
+	});
+
+	return e.app;
 }
-NotFound.prototype.__proto__ = Error.prototype;
 
 
+/*
+ * setupServer - prepare to listen for http connections
+ * -----------
+ *  all trafic comes through the closure in here.
+ *  if it's not for one of our apps, we check the proxies.
+ *  if it's
+ *  port : port to listen for HTTP trafic
+ *  applist : list of apps served by this webserver
+ *  ip : optional IP to listen on - in case our box has more than one
+ */
 function setupServer(port, applist, ip) {
 var webserver_app = express.createServer();
+var eachapp, e;
 
 	for (var l=applist.length-1; l>=0; l--) {
-		var eachapp = require('../apps/' + applist[l].appname + '/' + applist[l].appname + '_app.js');
-		var e=eachapp.env;
+		eachapp = require('../apps/' + applist[l].appname + '/' + applist[l].appname + '_app.js');
+		e=eachapp.env;
 		if (e) {
 			e.appname = applist[l].appname;
-			e.findFields = swxmo.findFields;
-			e.translateFields = swxmo.translateFields;
-			e.respond = function(){
-					var args = [this];
-					for (i=0; i<arguments.length; i++)
-						args.push(arguments[i]);
-					swxmo.respond.apply(this, args);
-				};
-			eachapp.app = e.app;
+			eachapp.app = configureAppEnv(e);
+
+			this_admin_app = configureAppEnv(require('./admin/admin')(e));
+			this_admin_app.use(express.bodyParser());
+			webserver_app.use(express.vhost("admin." + applist[l].dname, this_admin_app));
 		}
 		applist[l].app = eachapp.app;
 		webserver_app.use(express.vhost(applist[l].dname, applist[l].app));
@@ -61,7 +80,7 @@ var webserver_app = express.createServer();
 						res.write(chunk, 'binary');
 					});
 					proxy_response.addListener('end', function() {
-	 console.log('passing ' + req.url + ' request for ' + req.header('Host') + ' via proxy.');
+	 console.log('passing ' + req.url + ' response from ' + req.header('Host') + ' via proxy.');
 						res.end();
 					});
 					proxy_response.addListener('error', function(e) {

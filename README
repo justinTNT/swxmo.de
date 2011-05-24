@@ -1,15 +1,21 @@
-1st commit.
-----------
-
-SWXMOde: Sammy | (something-like)Weld | eXpress | MOngoose | noDE
+SWXMOde: Sammy | (something-like)Weld <=> eXpress | MOngoose | noDE
 
 This is just how I do it :
 if you have the same design criteria and infrastructure,
-you might like to do it this way to.
+you might like to do it this way too.
 
-so I offer here the few threads it takes to stich these components together,
-along with a bare-bones example app (to come)
+Most probably, you'll just want to take a look and do something slightly different.
+(eg. use view modules in sammy and express, which I have forsaken)
+
+so here's the few threads it takes to stich these components together,
+along with a bare-bones example app (one day we'll EYODF)
 and an empty template for the browser script (to come)
 
-more documentation upon request...
+browserscripts, including jquery, are just touched:
+you can find the latest versions for yself.
+
+new:
+barebones of admin is in place : a lot more work to go before we can EYODF
+browserbootstrap for sammy
+ugly but workable build script
 
