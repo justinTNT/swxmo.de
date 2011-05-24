@@ -1,0 +1,78 @@
+
+var	mongoose = require('mongoose');
+var	ft = require('../fieldtools');
+var	tt = require('../temptools');
+var	adminschema = require('./adminschema');
+
+module.exports = function(e){
+
+	var env = {	app : e.app
+		     ,  respond : e.respond
+		     ,  dir : __dirname
+		     ,  appname : 'admin'
+		     ,  targetapp : e.appname
+		     ,  staticurl : e.staticurl
+		};
+
+	env.basetemps = [ {selector:'#boilerplate-container', filename:'admin.htm'} ];
+	tt.configureTemplates(env);
+
+	var appdb = mongoose.createConnection('mongodb://localhost/' + env.appname);
+	var admdb = mongoose.createConnection('mongodb://localhost/swxmodeadmin');
+	var Fields = admdb.model('SWXadmFields');
+
+	env.app.get("/admin/list", function(req, res){
+
+		Fields.distinct('table', {appname:env.targetapp}, function(err, docs) {
+			if (err) throw err;
+			var all_objs = {eachtable: ft.translateFields(docs, ['table'])};
+			var temps = [{selector:'#maintab', filename:'listall.htm'}
+						];
+
+ console.log('listing tables');
+ console.log(all_objs);
+ console.log(docs);
+			env.respond(req, res, env.basetemps, temps, all_objs);
+		});
+
+	});
+
+
+	Fields = admdb.model('SWXadmFields');
+/*
+	Fields.distinct('table', {appname:env.targetapp}, function(err, docs) {
+
+		if (err) throw err;
+		for (key in docs) {
+			thistable = docs[key];
+*/
+//			env.app.get("/admin/list/:table" + thistable, function(req, res){
+			env.app.get("/admin/list/:table", function(req, res){
+				var which_field_fields = ['name', 'listorder', {listwidth:'name.width'}];
+				var thistable = req.params.table;
+console.log(which_field_fields);
+console.log(ft.findFields(which_field_fields));
+console.log(env.targetapp + ':' + thistable);
+//				Fields.find(ft.findFields(which_field_fields), {appname:env.targetapp, table:thistable, listed:true}) .sort('listorder', 1).run( function(err, docs) {
+				Fields.find({appname:env.targetapp, table:thistable, listed:true}, ft.findFields(which_field_fields), function(err, docs) {
+console.log('got');
+ console.log(docs);
+						if (err) throw err;
+						var all_objs = {eachfield: ft.translateFields(docs, which_field_fields)};
+						var temps = [{selector:'#maintab', filename:'listthis.htm'}
+									];
+
+ console.log('listing fields');
+ console.log(all_objs);
+ console.log(docs);
+						env.respond(req, res, env.basetemps, temps, all_objs);
+					});
+/*
+			});
+		}
+ */
+
+	});
+
+};
+

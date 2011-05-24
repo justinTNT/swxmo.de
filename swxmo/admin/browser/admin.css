@@ -1,0 +1,67 @@
+.solarizedfg_base03    { color:#002b36; }
+.solarizedfg_base02    { color:#073642; }
+.solarizedfg_base01    { color:#586e75; }
+.solarizedfg_base00    { color:#657b83; }
+.solarizedfg_base0     { color:#839496; }
+.solarizedfg_base1     { color:#93a1a1; }
+.solarizedfg_base2     { color:#eee8d5; }
+.solarizedfg_base3     { color:#fdf6e3; }
+.solarizedfg_yellow    { color:#b58900; }
+.solarizedfg_orange    { color:#cb4b16; }
+.solarizedfg_red       { color:#dc322f; }
+.solarizedfg_magenta   { color:#d33682; }
+.solarizedfg_violet    { color:#6c71c4; }
+.solarizedfg_blue      { color:#268bd2; }
+.solarizedfg_cyan      { color:#2aa198; }
+.solarizedfg_green     { color:#859900; }
+
+.solarizedbg_base03    { background-color:#002b36; }
+.solarizedbg_base02    { background-color:#073642; }
+.solarizedbg_base01    { background-color:#586e75; }
+.solarizedbg_base00    { background-color:#657b83; }
+.solarizedbg_base0     { background-color:#839496; }
+.solarizedbg_base1     { background-color:#93a1a1; }
+.solarizedbg_base2     { background-color:#eee8d5; }
+.solarizedbg_base3     { background-color:#fdf6e3; }
+.solarizedbg_yellow    { background-color:#b58900; }
+.solarizedbg_orange    { background-color:#cb4b16; }
+.solarizedbg_red       { background-color:#dc322f; }
+.solarizedbg_magenta   { background-color:#d33682; }
+.solarizedbg_violet    { background-color:#6c71c4; }
+.solarizedbg_blue      { background-color:#268bd2; }
+.solarizedbg_cyan      { background-color:#2aa198; }
+.solarizedbg_green     { background-color:#859900; }
+
+
+body     { background-color:#fdf6e3; }
+
+div#header {
+	width:100%;
+	height:99px;
+	font-size:90px;
+	letter-spacing:-9px;
+	font-weight:900;
+	font-family:Georgia,Arial,Verdana;
+}
+
+div.listallschemes {
+	font-size:32px;
+	padding-top:2em;
+	padding-left:4em;
+}
+
+div.eachtable {
+	padding-top:0.5em;
+	padding-left:2em;
+}
+
+div.eachfield {
+	float:left;
+	border-right:1px solid #eee8d5;
+	border-bottom:1px solid #eee8d5;
+}
+
+div.name {
+	float:left;
+	padding-left:1em;
+}
