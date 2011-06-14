@@ -10,9 +10,11 @@
  */
 
 var	mongoose = require('mongoose');
-var	adminschema = require('./admin/adminschema');
-var	admins = mongoose.model('swxAdm');
-var	AdminFields = mongoose.model('SWXadmFields');
+
+var appdb, admdb = mongoose.createConnection('mongodb://localhost/swxmodeadmin');
+var	adminschema = require('./admin/schema/admin');
+var	Admins = admdb.model('swxAdm');
+var	AdminFields = admdb.model('SWXadmFields');
 
 var	fs = require('fs');
 var	ofd;
@@ -83,7 +85,10 @@ function addFields(app, tab, fields, cnt, cb) {
  * already derived from the schema directory
  */
 function load_schema (dirname, filename, cb) {
-	thech = require(dirname + '/' + filename).tree;
+	modelname = require(dirname + '/' + filename);
+	thech = modelname;
+
+	thech=thech.schema.tree;
 	filename = filename.substr(0, filename.indexOf('.'));
 
 	// if wipe ? later on we might only want to add fields ...
@@ -179,10 +184,10 @@ function touch_dir (dirname, cb) {
  * we want to be sure there's an admin user setup for this app.
  */
 function ensureAdminAccess(cb) {
-	admins.find({'appname':appname}, function(err, docs) {
+	Admins.find({'appname':appname}, function(err, docs) {
 		if (err) throw err;
 		if (! docs.length) {
-			var thisadm = new admins();
+			var thisadm = new Admins();
 			thisadm.login = thisadm.passwd = thisadm.name = 'admin';
 			thisadm.appname = appname;
 
@@ -193,7 +198,9 @@ function ensureAdminAccess(cb) {
 					throw err;
 				} else {
 					if (cb) cb();
-					else mongoose.disconnect();
+					else {
+						appdb.disconnect();
+					}
 				}
 			});
 		} else cb();
@@ -213,7 +220,9 @@ function ensureAdFieldCfg(cb) {
 			load_schema(dn, fn, function(){
 				if (cb) cb();
 				else {
-					mongoose.disconnect();
+					appdb.close();
+					if (admdb != appdb)
+						admdb.close();
 				}
 			});
 		});
@@ -308,9 +317,14 @@ read_dir(appdir + '/templates/skeleta',
 
 
 /*
- * this section makes sure we have an admin user in the database for this app
+ * this section makes sure we have a super admin user in the database for this app
+ * then (on callback) sets up the default admin layout for all the fields,
  */
-	if (appname !== 'admin') {
-		mongoose.connect('mongodb://localhost/swxmodeadmin');
+
+	if (appname == 'admin') {
+		appdb = admdb;
+		ensureAdFieldCfg();
+	} else {
+		appdb = mongoose.createConnection('mongodb://localhost/' + appname);
 		ensureAdminAccess(ensureAdFieldCfg);
 	}

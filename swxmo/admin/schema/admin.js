@@ -41,4 +41,5 @@ swxmodeadfieldSchema.virtual('widthlist')
 
 mongoose.model('SWXadmFields', swxmodeadfieldSchema);
 
-module.exports = swxmodeadfieldSchema;
+module.exports.name = 'swxAdm';
+module.exports.schema = swxmodeadminSchema;

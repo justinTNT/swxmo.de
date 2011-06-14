@@ -37,9 +37,11 @@ body     { background-color:#fdf6e3; }
 
 div#header {
 	width:100%;
-	height:99px;
-	font-size:90px;
-	letter-spacing:-9px;
+	top:0px;
+	left:0px;
+	height:80px;
+	font-size:70px;
+	letter-spacing:-11px;
 	font-weight:900;
 	font-family:Georgia,Arial,Verdana;
 }
@@ -55,13 +57,256 @@ div.eachtable {
 	padding-left:2em;
 }
 
-div.eachfield {
+div.admin_table_fields {
+	margin-left:20px;
+}
+
+div.admin_table_field {
 	float:left;
-	border-right:1px solid #eee8d5;
-	border-bottom:1px solid #eee8d5;
+	border:1px solid #FDF6E3;
+	color:#000;
+	height:1.8em;
+	font-size:150%;
+	padding-top:0.4em;
+	overflow:hidden;
+}
+
+div.already_edited {
+	color:#268bd2;
+}
+div.hovering {
+	color:#586e75;
+}
+div.already_deleted {
+	color:#dc322f;
+	opacity:0.2;
+}
+
+
+div.admin_table_record {
+	clear:both;
+	float:left;
+	width:100%;
+	margin-left:20px;
+}
+
+div.admin_table_record_field {
+	float:left;
+	border:1px solid #eee8d5;
+	height:1.4em;
+	overflow:hidden;
+	background-color:#fdf6e3;
 }
 
 div.name {
 	float:left;
 	padding-left:1em;
 }
+
+div#addmore {
+	margin:1em;
+	height: 10px;
+	width: 333px;
+}
+
+div#addmore button {
+	margin:2em;
+}
+
+div#plus-menu {
+	background-color: #EEE8D5;
+	position: absolute;
+	padding: 1em;
+	display: block;
+	margin-top: -1em;
+	display:none;
+}
+
+div.plus-field {
+	border: 1px solid #FDF6E3;
+	padding: 3px;
+	margin-top: 2px;
+}
+
+div#plusbutt {
+	background-image: url('/browser/images/add-icon.png');
+	background-repeat: no-repeat;
+	float: left;
+	height: 16px;
+	width: 16px;
+	margin: 10px;
+	display:none;
+}
+
+.button-close {
+	background-image: url('/browser/images/close-icon.png');
+	top: 0;
+	right: 3px;
+	height: 10px;
+	width: 10px;
+	background-repeat: no-repeat;
+	position: absolute;
+	opacity:0;
+}
+
+.button-desc {
+	background-image: url('/browser/images/desc-icon.png');
+	top: 1px;
+	right: 17px;
+	height: 10px;
+	width: 10px;
+	background-repeat: no-repeat;
+	position: absolute;
+	visibility:hidden;
+}
+
+.button-asc {
+	background-image: url('/browser/images/asc-icon.png');
+	top: 1px;
+	right: 17px;
+	height: 10px;
+	width: 10px;
+	background-repeat: no-repeat;
+	position: absolute;
+	visibility:hidden;
+}
+
+div#maintab {
+	position:absolute;
+	left:0px;
+	top:99px;
+	z-index:3;
+	padding-left:1em;
+	width:4444px;
+}
+
+div#othermaintab {
+	display:none;
+	position:absolute;
+	left:0px;
+	top:1234px;
+	z-index:2;
+	padding-left:1em;
+	width:4444px;
+}
+
+
+div#maintab form {
+	margin:2em;
+	font-size:300%;
+}
+
+div#maintab form input {
+	margin:0.2em;
+}
+
+div#mainmenu {
+	position:absolute;
+	top:0px;
+	right:33px;
+	width:333px;
+	letter-spacing:0px;
+	font-size:23px;
+
+}
+
+div#saveconfig {
+	width:32px;
+	height:32px;
+	display:none;
+	float:right;
+	background-image:url('/browser/images/save-icon.png');
+}
+
+
+button#add {
+	color:#859900;
+}
+
+button#less {
+	color:#dc322f;
+	display:none;
+	float:left;
+}
+
+input.deleteme {
+	opacity:0;
+	float:left;
+	margin-left:-20px;
+}
+
+div.already_deleted input.deleteme {
+	display:none;
+}
+
+/*
+ * style definitions for instance page
+ */
+
+div.instancelabels {
+	float:left;
+	font-size:300%;
+	border-right: 1px solid #EEE8D5;
+	padding-right: 8px;
+}
+
+div.instancelabelholder {
+	width:100%;
+	height:1em;
+	margin-top:5px;
+	margin-bottom:5px;
+	clear:both;
+	position:relative;
+}
+
+div.instancelabel {
+	float:right;
+}
+
+div.instanceinputs {
+	float:left;
+	margin-top:1em;
+}
+
+div.instanceinput {
+	margin-left:1em;
+	margin-top:5px;
+	margin-bottom:5px;
+	font-size:150%;
+}
+
+div.ghostedinput {
+	border-top:2px dotted #EEE8D5;
+	border-right:2px dotted #EEE8D5;
+}
+
+button#save {
+	color:#859900;
+	float:left;
+	margin:2em;
+}
+
+button#cancel {
+	color:#dc322f;
+	float:left;
+	margin:2em;
+}
+
+
+/*
+ * jQuery UI Resizable 1.8.13
+ *
+ * Copyright 2011, AUTHORS.txt (http://jqueryui.com/about)
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ * http://jquery.org/license
+ *
+ * http://docs.jquery.com/UI/Resizable#theming
+ */
+.ui-resizable { position: relative;}
+.ui-resizable-handle { position: absolute;font-size: 0.1px;z-index: 99999; display: block;
+	/* http://bugs.jqueryui.com/ticket/7233
+	 - Resizable: resizable handles fail to work in IE if transparent and content overlaps
+	*/
+	background-image:url(data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=);
+}
+.ui-resizable-e { cursor: e-resize; width: 7px; right: -5px; top: 0; height: 100%; }

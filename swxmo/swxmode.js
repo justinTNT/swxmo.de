@@ -57,15 +57,15 @@ function weldTemps(templates, objects, data, sendEmOff) {
 		if (! $selected.length) throw "bad selector " + select;
 
 		for (var sel in objects) {
-			var dat=objects[sel]
-			 ,  l=dat.length
-			 ,  $s;
+			var dat, l, $s;
 
-			if (l) {
-				$s = data.find("."+sel)
-				if (! $s.length) throw "bad array selector " + sel + " in template " + select;
-				$s = $s.not('.item_welded_on');
-				if ($s.length) {
+			$s = data.find("#"+sel);
+			if (! $s.length) $s = data.find("."+sel);
+			if (! $s.length) throw "bad selector " + sel + " in template " + select;
+			$s = $s.not('.item_welded_on');
+			if ($s.length) {
+				dat=objects[sel]
+				if (l=dat.length) {
 					var $thisone=$s, $replacement;
 					for (var i=0; i<l; i++) {
 						if (i+1 < l) $replacement = $thisone.clone();
@@ -73,15 +73,8 @@ function weldTemps(templates, objects, data, sendEmOff) {
 						if (i) $s.append($thisone);
 						$thisone = $replacement;
 					}
-				}
-			} else {
-				$s = data.find("#"+sel);
-				if (! $s.length) $s = data.find("."+sel);
-				if (! $s.length) throw "bad selector " + sel + " in template " + select;
-				$s = $s.not('.item_welded_on');
-				if ($s.length) weldItem(dat, $s);
+				} else weldItem(dat, $s);
 			}
-
 		}
 
 		weldTemps(templates, objects, data, sendEmOff);
