@@ -134,6 +134,7 @@ function getProxy(name, port, clandestine, proxies) {
 	c.on('connect', function(s){
 		console.log('connected to proxy server at ' + name + ':' + port);
 		for (i=proxies.length-1; i>=0; i--) {
+		console.log('requesting proxy of ' + proxies[i]);
 			c.write(proxies[i] + ' ');
 		}
 		c.write(clandestine);
