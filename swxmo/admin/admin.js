@@ -2,12 +2,43 @@ var	os = require('os')
  ,	mongoose = require('mongoose')
  ,	ft = require('../fieldtools')
  ,	express = require('express')
- ,	_ = require('underscore');
+ ,	_ = require('underscore')
+ , fs = require('fs')
+ , sys = require('sys')
+;
 
 require('./schema/admin');
 var admdb = mongoose.createConnection('mongodb://localhost/swxmodeadmin');
 var admins = admdb.model('swxAdm');
 var Fields = admdb.model('SWXadmFields');
+
+
+
+/*
+ * this convoluted conclusion to the very simple file load
+ * is cos we might want to rename it if it already exists ...
+ */
+function finishFileLoad(from, to, count, res) {
+	fs.stat(to, function(err, stats){
+		var i;
+		if (!err) {
+			if (count) {
+				while (to.charAt(to.length-1) != '_')
+					to=to.substr(0, to.length - 1);
+				to=to.substr(0, to.length - 1);
+			}
+			to = to + '_' + count.toString();
+			count++;
+			finishFileLoad(from, to, count, res);
+		} else {
+			fs.rename(from, to);
+			while ((i = to.indexOf('/')) >= 0)
+				to = to.substr(i+1);
+			res.writeHead(200, {'content-type': 'text/plain', 'final-filename': to});
+			res.end(); 
+		}
+	});
+}
 
 
 function authenticate(name, pass, appname, cb) {
@@ -60,7 +91,7 @@ module.exports = function(e){
 	function onlyAdminCanAdminAdmin(req, res, next) {
 		if (req.params.table == 'admin') {
 			req.params.theTable = admins;
-			if (req.session.user.name == 'admin')
+			if (req.session.user.login == 'admin')
 				next();
 			else {
 				next(new Error('Unauthorised access of admin tables'));
@@ -76,7 +107,7 @@ module.exports = function(e){
 	env.app.get("/list", requiresLogin, function(req, res, next){
 		Fields.distinct('table', {appname:env.targetapp}, function(err, docs) {
 			if (err) throw err;
-			if (req.session.user.name == 'admin')
+			if (req.session.user.login == 'admin')
 				docs.push({table:'admin'});
 			var tmpobj = {};
 			tmpobj['table'] = 'table.href';
@@ -95,7 +126,7 @@ module.exports = function(e){
 		if (req.params.table.indexOf('.') > 0)
 			next(); // not really a table name, prolly favicon.ico ...
 		else {
-			if (req.session.user.name == 'admin' && req.params.table == 'admin')
+			if (req.session.user.login == 'admin' && req.params.table == 'admin')
 				app = 'admin';
 			else app = env.targetapp;
 			Fields.find({ appname : app, table : req.params.table})
@@ -150,16 +181,31 @@ module.exports = function(e){
 
 	env.app.post("/remove_from/:table", requiresLogin, onlyAdminCanAdminAdmin, function(req, res, next){
 		var ids = JSON.parse(req.body.id_array);
+/*
 		for (i=ids.length-1; i>=0; i--)
 			req.params.theTable.remove({_id:ids[i]}, function(err, docs){
 				if (err) throw err;
 			});
+*/
+console.log(ids.length);
+for (i=ids.length-1; i>=0; i--)
+	console.log(ids[i]);
+
+		req.params.theTable.remove({_id:{$in:ids}}, function(err, docs){
+				if (err) {
+					console.log('error');
+					throw err;
+				} else {
+					console.log('ok ' + docs.length);
+				}
+			});
+
 		res.send('OK');	
 	});
 
 
 	env.app.post('/update_config/:table', requiresLogin, function(req,res) {
-		if (req.session.user.name == 'admin') {
+		if (req.session.user.login == 'admin') {
 			var thislist = JSON.parse(req.body.list);
 			_.each(thislist, function(item) {
 				var id=item._id;
@@ -198,6 +244,20 @@ module.exports = function(e){
 		res.redirect('/sessions/new');
 	});
 
+	env.app.post('/upload/:where', requiresLogin, function(req,res) {
+		var topath = process.cwd() + '/apps/static/public/' + env.targetapp + '/' + req.param('subdir') + '/';
+		var frompath = '/tmp/' + req.params.where + '_';
+		var filename = req.headers['x-file-name'];
+
+		var filestream = new fs.WriteStream(frompath + filename);
+		req.addListener('data', function(buff) { 
+			filestream.write(buff);
+		}); 
+		req.addListener('end', function() { 
+			filestream.end();
+			finishFileLoad(frompath + filename, topath + filename, 0, res);
+	   }); 
+	});
 
 	return env;
 };
