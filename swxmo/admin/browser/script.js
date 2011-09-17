@@ -1,8 +1,15 @@
 
 var admin_table_fields = null; // list of fields for the current schema
 var admin_table_records = []; // list of loaded data for the current schema
-var which_route = ''; // keeps track of which schema in which app we're werking on
+var which_route = ''; // keeps track of which schema in which app we're werking on : leading slash
 var adminflag = false; // superadmin?
+
+var edit_flags = [ {name:'default', title:'Text'},
+					{name:'textarea', title:'Text Area'},
+					{name:'richtext', title:'Rich Text Editor'},
+					{name:'upload', title:'File Upload'},
+					{name:'date', title:'Date'}
+				];
 
 
 function showSave() {
@@ -30,19 +37,27 @@ function logOut() {
 function delData() {
 	var delarray = [];
 	$allrs = $('div.admin_table_record');
+/*
 	for (i=0; i<admin_table_fields.length; i++) {
 		if ($($allrs[i]).find('input.deleteme').is(':checked'))
 			delarray.push(admin_table_records[i]['_id']);
 	}
+*/
+	$('input.deleteme:checked').each(function(){
+		var the_id = $(this).attr('id');
+		the_id=the_id.substr(7);
+		delarray.push(the_id);
+	});
+
 	$.post('/remove_from' + which_route, {id_array:JSON.stringify(delarray)}, function(){ 
-		for (i=0; i<admin_table_fields.length; i++) {
+		for (i=0; i<$allrs.length; i++) {
 			var $nextrec = $($allrs[i]);
 			if ($nextrec.find('input.deleteme').is(':checked')) {
 				admin_table_records[i]['_id'] = null;
 				$nextrec.addClass('already_deleted');
 			}
 		}
-		$('input.deleteme:checked').attr('checked',false);
+		$('input.deleteme:checked').remove();
 		$('button#less').hide();
 	});
 }
@@ -88,13 +103,9 @@ function setupNewField($f, wtf) {
 
 /*
  * this section of code is for all the item-based operations
- *
- *
- *
- *
- *
  */
 
+// is this redundant?
 function deleThem () {
 /*
 	var ids2del = [];
@@ -107,6 +118,22 @@ function deleThem () {
 	}
 	ajax.post('/'+model+'/delete', jqo_list);
 */
+}
+
+
+/*
+ * file upload callbacks
+ */
+function uploadGood($who) {
+	$who.css({color:'#284', backgroundColor:'#fff'});
+}
+
+function uploadProgress($who) {
+	$who.css('backgroundColor', '#ffa');
+}
+
+function uploadBad($who) {
+	$who.css('backgroundColor', '#fba');
 }
 
 function showAllInstanceFields () {
@@ -123,10 +150,26 @@ function setupNewInstanceField($f) {
 		field.edited = false;
 		$('input#input_' + field.name).parent().remove();	
 	});
+	$f.find(':first').bind('contextmenu', function(){
+		showContextMenu($(this).parent().attr('id'));
+		return false;
+	});
 }
 
 function findInstanceFieldHeight(field) {
-	return 44; // this is just a temporary kludge : should look at field.editopts to make a multiple of the label height
+	if (field.editflags == 'textarea') {
+		if (field.editheight) return field.editheight;
+		return 124;
+	} else if (field.editflags == 'upload') {
+		return 54;
+	} else if (field.editflags == 'date') {
+		if (field.editheight) return field.editheight;
+		return 224;
+	} else if (field.editflags == 'richtext') {
+		if (field.editheight) return field.editheight;
+		return 334;
+	}
+	return 44; // default
 }
 
 
@@ -139,7 +182,7 @@ function drawFieldBox() {
 	var sorted = _.sortBy(admin_table_fields, function(f) { return f.editorder; });
 	_.each(sorted, function(field) {
 		if (field.edited && field.name != 'id' && field.name != '_id') {
-			$fb.append($('<div class="instancelabelholder" id="instance_' + field.name + '"><div class="instancelabel">' + field.name + '</div></div>').height(findInstanceFieldHeight(field)));
+			$fb.append($('<div class="instancelabelholder" id="instance_' + field.name + '"><div class="instancelabel">' + field.name + '</div></div>'));
 		}
 	});
 
@@ -162,11 +205,11 @@ function drawFieldBox() {
 
 /*
  * the whole field box (the entire list of labels, not each label) is resizable
+			minHeight:$(this).height(),
+			maxHeight:$(this).height(),
  */
 		$fb.resizable({
 			handles:'e',
-			minHeight:$(this).height(),
-			maxHeight:$(this).height(),
 			minWidth:123,
 			maxWidth:444,
 			stop:function(e, ui) {
@@ -253,7 +296,11 @@ function drawFieldBox() {
  * returns true if the instance edit form is valid,
  * otherwise highlights the first invalid field
  */
-function validateField() {
+function validateField($instanceInput) {
+
+	var fn = $instanceInput.attr('id').substr(7); // skip "instin_"
+	var field = _.detect(admin_table_fields, function(f) { return f.name == fn; });
+
 	if (false) {
 		$(this).addClass('invalid_field');
 		return false;
@@ -274,12 +321,186 @@ function validateForm() {
 	return true;
 }
 
+function makeValueBox(field, $where, eto_i) {
+var $newin;
+
+	/* create input element */
+
+	switch (field.editflags) {
+		case 'textarea':
+			$newin = $('<textarea rows="3" cols="64" name="' + field.name + '" id="input_' + field.name + '"></textarea>');
+			break;
+		case 'richtext':
+			$newin = $('<textarea class="enrichme" name="' + field.name + '" id="input_' + field.name + '"></textarea>');
+			break;
+		case 'upload':
+			if (! field.uploadpath)
+				field.uploadpath='upload';
+			$newin = $('<div class="uploadfields"><span class="uploadurl">...</span>&nbsp;/<span class="uploadpath">' + field.uploadpath + '</span>/&nbsp;'
+					+ '<input type="text" name="' + field.name + '" id="input_' + field.name + '"></input>'
+					+ '<input type="button" value="browse" class="browse" id="browse_' + field.name + '" name="browse_' + field.name + '">'
+					+ '<input type="button" value="upload" class="upload" id="upload_' + field.name + '" name="upload_' + field.name + '">'
+					+ '</div>');
+			break;
+		default:
+			$newin = $('<input type="text" name="' + field.name + '" id="input_' + field.name + '"></input>');
+	}
+
+	$where.append($newin);
+	var h = findInstanceFieldHeight(field);
+	$newin.add($where).height(h).width(field.editwidth);
+	$('div#instance_' + field.name).height(h);
+
+	/* setup validation handling */
+
+	if (eto_i >= 0) {
+		var $setthisone;
+		if (field.editflags == 'upload')
+			$setthisone = $newin.find('input:first');
+		else $setthisone = $newin;
+		$setthisone.val(admin_table_records[eto_i][field.name]);
+	}
+
+	$newin.width(field.editwidth);
+	if (field.editflags != 'upload')
+		$newin.find('input').width(field.editwidth);
+
+	$newin.change(function(){
+			$(this).addClass('altered');
+			if (validateField($(this), eto_i)) {
+				if (validateForm(eto_i)) {
+					$('button#save').show();
+				}
+			} else {
+				$('button#save').hide();
+			}
+		});
+
+	if (field.editflags == 'upload') { // make file upload werk, with hidden input@file
+		$newin.find('input.upload')
+				.after($("<input type='file' id='fileupload_" + field.name + "' name='fileupload_" + field.name + "' style='width:0px; height:0px;'>"))
+				.click(function(){
+					$(this).next().click().change(function(){
+						var fn = $(this).val();
+						var $whichin = $(this).parent().find('input:first');
+						while ((i = fn.indexOf('\\')) >= 0)
+							fn = fn.substr(i+1);
+						while ((i = fn.indexOf('/')) >= 0)
+							fn = fn.substr(i+1);
+						$whichin.val(fn);
+
+						var xhr2 = new XMLHttpRequest();
+						var uri = 'http://admin.larrak.in/upload' + which_route + '?subdir=' + field.uploadpath;
+						xhr2.open('POST', uri, true);
+
+						xhr2.upload.addEventListener('error', function(){ uploadBad($whichin); }, false);
+						xhr2.upload.addEventListener('abort', function(){ uploadBad($whichin); }, false);
+						xhr2.upload.addEventListener('progress', function(){ uploadProgress($whichin); }, false);
+						xhr2.onload = function(e){
+							if (xhr2.status != 200) alert(xhr2.status);
+							$whichin.val(xhr2.getResponseHeader('final-filename')).addClass('altered');
+							uploadGood($whichin);
+						};
+
+					xhr2.setRequestHeader("Cache-Control", "no-cache");
+					xhr2.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+					xhr2.setRequestHeader("X-File-Name", fn);
+
+						xhr2.send(this.files[0]);
+						return false;
+					});
+
+					return false;
+				});
+	}
+
+	if (adminflag) { // some features only open to admin :
+
+		/* maybe make it resizable */
+
+		if (field.editflags == 'default' || field.editflags == 'textarea' || field.editflags == '') {
+			$where.resizable({
+					handles:'e',
+					minWidth:44,
+					maxWidth:1234,
+					helper:'ghostedinput',
+					stop:function(e, ui) {
+						var $the_in = $(e.target).find('input').add($(e.target).find('textarea'));
+						var id = $the_in.attr('id');
+						id =  id.substr(id.indexOf('_')+1);
+						$the_in.width(_.detect(admin_table_fields, function(f){ return f.name == id; }).editwidth = $(e.target).width());
+						showSave(); // we might want to save any re-arrangement of the fields
+					}
+				});
+		}
+
+		if (field.editflags == 'upload') { // admin can change upload path
+			$newin.find('span.uploadpath').css('color', "#9bd").click(function(){
+				$("<input type='text' class='temp' value='" + $(this).text() + "'>").insertAfter($(this).hide()).focus().blur(function(){
+					var $target = $(this).parent().find('span.uploadpath');
+					if ($target.text() != $(this).val()) {
+						var txt = $(this).val();
+						while (txt.length && (txt.charAt(0) == '/'))
+							txt = txt.substr(1, txt.length-1);
+						while (txt.length && (txt.charAt(txt.length-1) == '/'))
+							txt = txt.substr(0, txt.length-1);
+						$target.text(txt);
+						var id = $(this).parent().parent().attr('id');
+						id =  id.substr(id.indexOf('_')+1);
+						_.detect(admin_table_fields, function(f){ return f.name == id; }).uploadpath = txt;
+						showSave(); // might want to save the new uploadpath
+					}
+					$target.show();
+					$(this).remove();
+				});
+			});
+		}
+	}
+
+	/* add widgets to elements */
+
+	if ($newin.hasClass('enrichme')) {
+		var cki = CKEDITOR.instances['input_' + field.name];
+		if (cki) cki.destroy();
+		$newin.ckeditor(function(){
+									var spanid = this.container.$.id;
+									var $instance = $('#'+spanid).parent();
+									var h = $('#'+spanid).height();
+									spanid = spanid.substr(spanid.indexOf('input_')+6);
+									var field = _.detect(admin_table_fields, function(f) { return f.name == spanid; });
+									if (field.editheight) {
+										h = field.editheight;
+										$('#'+spanid).height(h);
+										this.resize(field.editwidth, field.editheight);
+									}
+									$instance.height(h);
+									$('div#instance_'+spanid).height(h);
+								}, {skin:'v2'});
+		cki = CKEDITOR.instances['input_' + field.name];
+		if (cki) cki.on('resize', function(e){
+			var f_id = this.container.$.id;
+			var i = f_id.indexOf('input_')+6;
+			f_id = f_id.substr(i);
+			var field = _.detect(admin_table_fields, function(f) { return f.name == f_id; });
+			var w = $(e.editor.getResizable().$).width();
+			var h = $(e.editor.getResizable().$).height();
+			if (adminflag && (w != field.editwidth || h != field.editheight)) {
+				field.editwidth = w;
+				field.editheight = h;
+				showSave();
+			}
+			$('div#instance_' + field.name).height(field.editheight);
+			$('div#instin_' + field.name).height(field.editheight);
+			return false;
+		});
+		$where.width('999px');
+	}
+}
 
 function drawValueBox() {
 var $vb = $('<div class="instanceinputs"></div>');
 var $eto = $('.edit_this_one');
 var eto_i = -1;
-var $newin;
 
 	$allrs = $('div.admin_table_record');
 	if ($eto.length)
@@ -289,50 +510,21 @@ var $newin;
 				break;
 			}
 	$('div.instanceinputs').remove();
+	$('div#othermaintab').append($vb);
 	var sorted = _.sortBy(admin_table_fields, function(f) { return f.editorder; });
 	_.each(sorted, function(field) {
 		if (field.edited && field.name != 'id' && field.name != '_id') {
-			$newin = $('<div class="instanceinput"><input type="text" name="' + field.name + '" id="input_' + field.name + '"></input></div>');
-			if (eto_i >= 0)
-				$newin.find('input').val(admin_table_records[eto_i][field.name])
-			$newin.height(findInstanceFieldHeight(field)).width(field.editwidth).find('input').width(field.editwidth)
-			.change(function(){
-					$(this).addClass('altered');
-					if (validateField($(this), eto_i)) {
-						if (validateForm(eto_i)) {
-							$('button#save').show();
-						}
-					} else {
-						$('button#save').hide();
-					}
-				});
-			if (adminflag)
-				$newin.resizable({
-						handles:'e',
-						minHeight:$(this).height(),
-						maxHeight:$(this).height(),
-						minWidth:44,
-						maxWidth:1234,
-						helper:'ghostedinput',
-						stop:function(e, ui) {
-							var $the_in = $(e.target).find('input');
-							var id = $the_in.attr('id');
-							id =  id.substr(id.indexOf('_')+1);
-							$the_in.width(_.detect(admin_table_fields, function(f){ return f.name == id; }).editwidth = $(e.target).width());
-							showSave();
-						}
-					});
-			$vb.append($newin);
+			var $commontainer = $('<div class="instanceinput" id="instin_' + field.name + '"></div>');
+			$vb.append($commontainer);
+			makeValueBox(field, $commontainer, eto_i);
 		}
 	});
-
-	$('div#othermaintab').append($vb);
 	$vb.append('<button id="save">Save</button><button id="cancel">Cancel</button>"');
 
 	$('button#cancel').click(function(){ hideInstancePage(); });
 	$('button#save').click(function(){
 		var newobj = {};
-		$('.instanceinput input.altered').each(function(){
+		$('.instanceinput .altered').each(function(){
 			var fieldname = $(this).attr('id');
 			fieldname = fieldname.substr(fieldname.indexOf('_')+1);
 			newobj[fieldname] = $(this).val();
@@ -378,10 +570,16 @@ function scrollUpWindow() {
 }
 
 function hideInstancePage() {
+var cki;
+
 	if ($('div#othermaintab').css('display') != 'none') {
 		scrollUpWindow();
 		scrollDownInstancePage();
 		fadeInListPage();
+	}
+	for (cki in CKEDITOR.instances) {
+		i = CKEDITOR.instances[cki];
+		i.destroy(false);
 	}
 }
 
@@ -412,6 +610,65 @@ function drawListPage() {
  *
  *
  */
+
+
+function closeContextMenu() {
+	$('div#context-menu').html('').fadeOut();
+	return false;
+}
+
+function showContextMenu(field_id) {
+console.log(field_id);
+var $loc = $('div#'+field_id+' >div');
+	$('div#context-menu').html('<div id="context-menu-close" class="button-close"></div><div id="context-menu-fields"></div>')
+						.css({left:23+$loc.offset().left, top:$loc.offset().top});
+	_.each(edit_flags, function(flag) {
+			$f = $('<div class="context-field" id="' + field_id.substr(9) + '_context_' + flag.name + '"></div>');
+			$f.html(flag.title);
+			$('div#context-menu-fields').append($f);
+	});
+	$('div.context-field').hover(function(){ $(this).css('background-color', '#fff'); }
+			,function(){ $(this).css('background', 'transparent'); }
+	 ).click(function(){
+		var field, f_id, flag_name, i, $eto, eto_i;
+
+		$eto = $('.edit_this_one');
+		eto_i = -1;
+		f_id = $(this).attr('id');
+		i = f_id.indexOf('_context_');
+		flag_name = f_id.substr(i+9);
+		f_id = f_id.substr(0, i);
+
+		field = _.detect(admin_table_fields, function(f) { return f.name == f_id; });
+
+		if (field.editflags != flag_name) {
+			field.editflags = flag_name;
+			showSave();
+
+			// redraw input
+			//
+			// after removing what's there, we might need to abstract out guts of drawvaluebox to get the field redrawn
+			// then might want to recalc the height of the corresponding label ...
+
+			$allrs = $('div.admin_table_record');
+			if ($eto.length)
+				for (i=0; i < $allrs.length; i++)
+					if ($eto[0] == $allrs[i]) {
+						eto_i = i;
+						break;
+					}
+
+			$where = $('div#instin_' + field.name);
+			$where.empty();
+			makeValueBox(field, $where, eto_i);
+		}
+		return closeContextMenu();
+	});
+	$('div#context-menu').fadeIn(666, function(){
+									$('div#context-menu-close').animate({opacity:'1'}, 1234).click(closeContextMenu);
+											});
+}
+
 
 
 function closePlusMenu() {
@@ -475,8 +732,6 @@ function makeFieldResizable($f) {
 	$f
 	.resizable({
 		handles:'e',
-		minHeight:$(this).height(),
-		maxHeight:$(this).height(),
 		minWidth:44,
 		maxWidth:444,
 		alsoResize:'.record_' + $f.attr('id'),
@@ -578,6 +833,7 @@ function sortableNewField($f) {
 }
 
 
+
 /*
  * draw the data that corresponds to the (previously hidden) field which we just added
  */
@@ -629,7 +885,7 @@ var field;
 			function() { if (!$(this).is(':checked')) $(this).animate({opacity:'1'}, 333); }
 		  , function() { if (!$(this).is(':checked')) $(this).animate({opacity:'0'}, 123); }
 	).click(function(e){
-		if ($('.deleteme:checked').length) $('button#less').show().click(function() { delData(); });
+		if ($('.deleteme:checked').length) $('button#less').show();
 		else $('button#less').hide();
 		e.stopPropagation();
 	});
@@ -637,7 +893,8 @@ var field;
 	$allrs.append('<div id="addmore"></div>');
 
 	$('div#addmore').append('<button id="less">DELETE</button>');
-	if ($('.deleteme:checked').length) $('button#less').show().click(function() { delData(); });
+	if ($('.deleteme:checked').length) $('button#less').show();
+	$('button#less').click(function() { delData(); return false; });
 
 	if (i-pos == 20) { // we got another full 20 records
 		$('div#addmore').append('<button id="more">More ...</button>');
@@ -711,9 +968,10 @@ function addNewField(field) {
 	else $('div.admin_table_fields').append($f);
 	$f.append('<div id="desc-' + field.name + '" class="button-desc"></div>'
 		 +'<div id="asc-' + field.name + '" class="button-asc"></div>');
-	if (adminflag)
-		 $f.append('<div id="close-' + field.name + '" class="button-close"></div>');
-	setupNewListField($f);
+	if (adminflag) {
+		$f.append('<div id="close-' + field.name + '" class="button-close"></div>');
+		setupNewListField($f);
+	}
 	sortableNewField($f);
 	return $f;
 }
@@ -786,5 +1044,11 @@ var $b = $('button#loginlogout')
 
 mysammyinstance = swxmoUpdate(callBefore, callAfter);
 $('button#loginlogout').click(function() { logOut(); });
+
+$.getScript('http://la.rrak.in/ckeditor/ckeditor.js', function(){
+	$.getScript('http://la.rrak.in/ckeditor/adapters/jquery.js', function(){
+	});
+});
+
 
 
