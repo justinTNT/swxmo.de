@@ -113,6 +113,23 @@ div#addmore button {
 	margin:2em;
 }
 
+
+div#context-menu {
+	background-color: #EEE8D5;
+	position: absolute;
+	padding: 1em;
+	display: block;
+	margin-top: -1em;
+	display:none;
+	z-index:13;
+}
+
+div.context-field {
+	border: 1px solid #FDF6E3;
+	padding: 3px;
+	margin-top: 2px;
+}
+
 div#plus-menu {
 	background-color: #EEE8D5;
 	position: absolute;
@@ -120,6 +137,7 @@ div#plus-menu {
 	display: block;
 	margin-top: -1em;
 	display:none;
+	z-index:13;
 }
 
 div.plus-field {
@@ -265,7 +283,6 @@ div.instancelabel {
 
 div.instanceinputs {
 	float:left;
-	margin-top:1em;
 }
 
 div.instanceinput {
@@ -291,6 +308,25 @@ button#cancel {
 	float:left;
 	margin:2em;
 }
+
+
+div.uploadfields {
+	margin-top:20px;
+}
+
+div.uploadfields input {
+	margin-top:-9px;
+}
+
+div.uploadfields input[type=text] {
+	width:13em;
+}
+
+div.uploadfields input[type=button] {
+	width:4em;
+	margin-left:6px;
+}
+
 
 
 /*
