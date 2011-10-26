@@ -9,20 +9,23 @@ var mongoose = require('mongoose'); // needed for forEach
  * b) a list of simple strings, and optional objects matching fieldname keys to selector.property values
  */
 function findFields(fields) {
-var len=fields.length;
+var len;
 var just_fields = [];
 
-	if (len) { // its a list
-		for (var i=0; i<len; i++) {
-			f = fields[i];
-			if (_.isString(f)) // just a fieldname
-				just_fields.push(f);
-			else for (key in f) // an object mapping fieldname keys to selector.property values
+	if (fields) {
+		len=fields.length;
+		if (len) { // its a list
+			for (var i=0; i<len; i++) {
+				f = fields[i];
+				if (_.isString(f)) // just a fieldname
+					just_fields.push(f);
+				else for (key in f) // an object mapping fieldname keys to selector.property values
+					just_fields.push(key);
+			}
+		} else { // its the schema
+			for (key in fields)
 				just_fields.push(key);
 		}
-	} else { // its the schema
-		for (key in fields)
-			just_fields.push(key);
 	}
 
 	return just_fields;

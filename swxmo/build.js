@@ -11,7 +11,7 @@
 
 var	mongoose = require('mongoose');
 
-var appdb, admdb = mongoose.createConnection('mongodb://localhost/swxmodeadmin');
+var admdb = mongoose.createConnection('mongodb://localhost/swxmodeadmin');
 var	adminschema = require('./admin/schema/admin');
 var	Admins = admdb.model('swxAdm');
 var	AdminFields = admdb.model('SWXadmFields');
@@ -20,6 +20,7 @@ var	fs = require('fs');
 var	ofd;
 
 var	appname, appdir;
+var rejig_db;
 
 
 
@@ -32,7 +33,8 @@ function writeStr2File(str) {
  * clears admin config for this table / for this app
  */
 function wipeAdFields(app, tab, cb) {
-	AdminFields.remove({'appname':app, 'table':tab}, function(err, docs) {
+	if (rejig_db != 'all') cb(); // only wipe if we're building all
+	else AdminFields.remove({'appname':app, 'table':tab}, function(err, docs) {
 		if (err) {
 			console.log('error wiping ' + app + '\'s ' + tab + 'table.');
 			throw err;
@@ -49,6 +51,8 @@ function wipeAdFields(app, tab, cb) {
  */
 function addAdField(app, tab, key, cnt, cb) {
 	AdminFields.find({'appname':app, 'table':tab, 'name':key}, function(err, docs) {
+		var s_flag = true;
+		var thisfield = {};
 		if (err) {
 			console.log('error checking in on key ' + key + ' in ' + app + '\'s ' + tab + 'table.');
 			throw err;
@@ -58,7 +62,18 @@ function addAdField(app, tab, key, cnt, cb) {
 			thisfield.name = key;
 			thisfield.appname = app;
 			thisfield.table = tab;
-			thisfield.listorder = thisfield.editorder = cnt++;
+		} else if (rejig_db == 'all') {
+			thisfield = docs[0];
+		} else s_flag=false;
+		thisfield.listorder = thisfield.editorder = cnt++;
+		if (s_flag) {
+			if (key == 'id' || key == '_id' || key == 'modified_date' || key == 'created_date') {
+				thisfield.listed = false;
+				thisfield.edited = false;
+			} else {
+				thisfield.listed = true;
+				thisfield.edited = true;
+			}
 			thisfield.save(function(err){
 				if (err) {
 	console.log('ERROR adding ' + key + ' in ' + tab + ' for ' + app);
@@ -67,12 +82,12 @@ function addAdField(app, tab, key, cnt, cb) {
 				}
 				cb();
 			});
-		}
+		} else cb();
 	});
 }
 
 function addFields(app, tab, fields, cnt, cb) {
-	if (fields.length) {
+	if (fields.length && rejig_db && rejig_db != 'none') {
 		cnt++;
 		nf = fields.shift();
 		addAdField(app, tab, nf, cnt, function(){ addFields(app, tab, fields, cnt, cb); });
@@ -91,7 +106,7 @@ function load_schema (dirname, filename, cb) {
 	thech=thech.schema.tree;
 	filename = filename.substr(0, filename.indexOf('.'));
 
-	// if wipe ? later on we might only want to add fields ...
+	// falls thru, unless rejig is set to all
 	wipeAdFields(appname, filename, function() {
 		var fields = [];
 		for (key in thech)
@@ -110,9 +125,7 @@ function read_file(dname, fname, cback) {
 		if (err) {
 			console.log(err);	// debug
 			console.log(dname + '/' + fname);	// debug
-			throw err;
-		}
-		cback(fname, String(data));
+		} else cback(fname, String(data));
 	});
 }
 
@@ -198,9 +211,6 @@ function ensureAdminAccess(cb) {
 					throw err;
 				} else {
 					if (cb) cb();
-					else {
-						appdb.disconnect();
-					}
 				}
 			});
 		} else cb();
@@ -219,11 +229,6 @@ function ensureAdFieldCfg(cb) {
 		function(fn){
 			load_schema(dn, fn, function(){
 				if (cb) cb();
-				else {
-					appdb.close();
-					if (admdb != appdb)
-						admdb.close();
-				}
 			});
 		});
 }
@@ -231,9 +236,13 @@ function ensureAdFieldCfg(cb) {
 
 appname=process.argv[2];
 if (!appname) {
-	console.log('usage: node build.js <appname>');
+	console.log('usage: node build.js <appname> [all|missing|none]');
+	console.log('where <appname> is the name of the application to rebuild browser plugins and template skeleta for,');
+	console.log('and the optional second argument chooses whether to replace, update or ignore existing field definitions.');
 	return;
 }
+
+rejig_db = process.argv[3];
 
 
 /*
@@ -271,7 +280,7 @@ ofd = fs.openSync(appdir + '/browser/plugins.js', 'w');
 
 read_dir(appdir + '/templates/skeleta',
 	function(fn, txt) {
-		txt = txt.replace(/[\t\n]/g, ' ');
+		txt = txt.replace(/[\t\n\r]/g, ' ');
 		txt = txt.replace(/'/g, "\\'");
 		globswxmodeskeleta[fn] = txt;
 	},
@@ -322,9 +331,13 @@ read_dir(appdir + '/templates/skeleta',
  */
 
 	if (appname == 'admin') {
-		appdb = admdb;
-		ensureAdFieldCfg();
+		ensureAdFieldCfg(function(){
+				setTimeout(function(){admdb.close();},123);
+		});
 	} else {
-		appdb = mongoose.createConnection('mongodb://localhost/' + appname);
-		ensureAdminAccess(ensureAdFieldCfg);
+		ensureAdminAccess(function() {
+			ensureAdFieldCfg(function(){
+				setTimeout(function(){admdb.close();},123);
+			})
+		});
 	}

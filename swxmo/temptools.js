@@ -28,7 +28,7 @@ function populatipi (e, dirname) {
 			throw err;
 		}
 		while (fn = files.shift()) {					// pull off each dir entry
-			if (/.*\.html?/.test(fn)) {				// if its .htm or .html
+			if (/.*\.html?/.test(fn) || /.*\.tpl?/.test(fn)) {				// if its .htm or .html or .tpl
 				path = dirname + '/' + fn;
 				impTmp(dirname, fn, function(cbfn, text){
 					e.templatipi[cbfn] = text;	// and keep em in the templatipi store

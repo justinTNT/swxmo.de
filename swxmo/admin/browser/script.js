@@ -1,8 +1,15 @@
 
 var admin_table_fields = null; // list of fields for the current schema
 var admin_table_records = []; // list of loaded data for the current schema
-var which_route = ''; // keeps track of which schema in which app we're werking on
+var which_route = ''; // keeps track of which schema in which app we're werking on : leading slash
 var adminflag = false; // superadmin?
+
+var edit_flags = [ {name:'default', title:'Text'},
+					{name:'textarea', title:'Text Area'},
+					{name:'richtext', title:'Rich Text Editor'},
+					{name:'upload', title:'File Upload'},
+					{name:'date', title:'Date'}
+				];
 
 
 function showSave() {
@@ -30,29 +37,32 @@ function logOut() {
 function delData() {
 	var delarray = [];
 	$allrs = $('div.admin_table_record');
-	for (i=0; i<admin_table_fields.length; i++) {
-		if ($($allrs[i]).find('input.deleteme').is(':checked'))
-			delarray.push(admin_table_records[i]['_id']);
-	}
+	$('input.deleteme:checked').each(function(){
+		var the_id = $(this).attr('id');
+		the_id=the_id.substr(7);
+		delarray.push(the_id);
+	});
+
 	$.post('/remove_from' + which_route, {id_array:JSON.stringify(delarray)}, function(){ 
-		for (i=0; i<admin_table_fields.length; i++) {
+		for (i=0; i<$allrs.length; i++) {
 			var $nextrec = $($allrs[i]);
 			if ($nextrec.find('input.deleteme').is(':checked')) {
 				admin_table_records[i]['_id'] = null;
 				$nextrec.addClass('already_deleted');
 			}
 		}
-		$('input.deleteme:checked').attr('checked',false);
+		$('input.deleteme:checked').remove();
 		$('button#less').hide();
 	});
 }
 
+
 function addInstance(o, wtf) {
-	$.post('/add_to' + which_route, {obj:JSON.stringify(o)}, function(){ wtf(); });
+	$.post('/add_to' + which_route, {obj:JSON.stringify(o)}, function(){ wtf(); return false; });
 }
 	
 function updateInstance(id, o, wtf) {
-	$.post('/update' + which_route, {id:id, obj:JSON.stringify(o)}, function(){ wtf(); });
+	$.post('/update' + which_route, {id:id, obj:JSON.stringify(o)}, function(){ wtf(); return false; });
 }
 	
 
@@ -88,13 +98,9 @@ function setupNewField($f, wtf) {
 
 /*
  * this section of code is for all the item-based operations
- *
- *
- *
- *
- *
  */
 
+// is this redundant?
 function deleThem () {
 /*
 	var ids2del = [];
@@ -109,12 +115,29 @@ function deleThem () {
 */
 }
 
+
+/*
+ * file upload callbacks
+ */
+function uploadGood($who) {
+	$who.css({color:'#284', backgroundColor:'#fff'});
+}
+
+function uploadProgress($who) {
+	$who.css('backgroundColor', '#ffa');
+}
+
+function uploadBad($who) {
+	$who.css('backgroundColor', '#fba');
+}
+
 function showAllInstanceFields () {
 	_.each(admin_table_fields, function(field) {
 		if (field.name != 'id' && field.name != '_id') {
 			field.edited = true;
 		}
 	});
+	showSave();
 	drawInstancePage();
 }
 
@@ -123,10 +146,23 @@ function setupNewInstanceField($f) {
 		field.edited = false;
 		$('input#input_' + field.name).parent().remove();	
 	});
+	$f.find(':first').bind('contextmenu', function(){
+		showContextMenu($(this).parent().attr('id'));
+		return false;
+	});
 }
 
 function findInstanceFieldHeight(field) {
-	return 44; // this is just a temporary kludge : should look at field.editopts to make a multiple of the label height
+	if (field.editflags == 'textarea') {
+		if (field.editheight) return field.editheight;
+		return 124;
+	} else if (field.editflags == 'upload') {
+		return 54;
+	} else if (field.editflags == 'richtext') {
+		if (field.editheight) return field.editheight;
+		return 334;
+	}
+	return 44; // default
 }
 
 
@@ -139,15 +175,16 @@ function drawFieldBox() {
 	var sorted = _.sortBy(admin_table_fields, function(f) { return f.editorder; });
 	_.each(sorted, function(field) {
 		if (field.edited && field.name != 'id' && field.name != '_id') {
-			$fb.append($('<div class="instancelabelholder" id="instance_' + field.name + '"><div class="instancelabel">' + field.name + '</div></div>').height(findInstanceFieldHeight(field)));
+			$fb.append($('<div class="instancelabelholder" id="instance_' + field.name + '"><div class="instancelabel">' + field.name + '</div></div>'));
 		}
 	});
 
-	var tmpw = _.detect(admin_table_fields, function(f){ return f.name == '_id'; }).editwidth;
+	var tmpw = 123, id4w = _.detect(admin_table_fields, function(f){ return f.name == '_id'; }).editwidth;
+	if (id4w) tmpw = id4w.editwidth;
 	if (tmpw < 123)
 		tmpw = 123;
 	$fb.width(tmpw);
-	$('div#othermaintab').append($fb);
+	$('div#detailtab').append($fb);
 
 	if (adminflag) {
 		$('div.instancelabelholder').each(function(){
@@ -157,16 +194,16 @@ function drawFieldBox() {
 			setupNewInstanceField($(this));
 		});
 
-		$('div.instancelabels').append('<div id="plusbutt"></div>');
-		setupPlusButt(showAllInstanceFields);
+
+		setupPlusButt( $('div.instancelabels').append('<div class="plusbutt"></div>') ,showAllInstanceFields );
 
 /*
  * the whole field box (the entire list of labels, not each label) is resizable
+			minHeight:$(this).height(),
+			maxHeight:$(this).height(),
  */
 		$fb.resizable({
 			handles:'e',
-			minHeight:$(this).height(),
-			maxHeight:$(this).height(),
 			minWidth:123,
 			maxWidth:444,
 			stop:function(e, ui) {
@@ -253,7 +290,14 @@ function drawFieldBox() {
  * returns true if the instance edit form is valid,
  * otherwise highlights the first invalid field
  */
-function validateField() {
+function validateField($instanceInput) {
+
+	var fn = $instanceInput.attr('id');
+	if (!fn) return true; // no validation on things that don't have "instin_.." ids
+
+	fn = fn.substr(7); // skip "instin_"
+	var field = _.detect(admin_table_fields, function(f) { return f.name == fn; });
+
 	if (false) {
 		$(this).addClass('invalid_field');
 		return false;
@@ -275,11 +319,336 @@ function validateForm() {
 }
 
 
+/*
+ * creates the list of files to display in chooser
+ * files is a list of {name,date,size} objects
+ * $where is the DOM object to append the list to
+ * selected is a callback which takes the filename
+ */
+function addFiles(files, $where, selected) {
+	for (i=0; i<files.length; i++) {
+		$where.append($("<div class='file_list_file'> \
+					<div class='filelist_name'>" + files[i].filelist_name + "</div> \
+					<div class='filelist_size'>" + files[i].filelist_size + "</div> \
+					<div class='filelist_date'>" + files[i].filelist_date.substr(0,files[i].filelist_date.indexOf('T')) + "</div> \
+					</div>"));
+	}
+
+	$b.find('div.file_list_file').click(function(){
+		selected($(this).find('div.filelist_name').text());
+	}).hover(function(){
+		$(this).animate({ backgroundColor: "#FDF6E3" }, 'fast');
+	}, function(){
+		$(this).animate({ backgroundColor: "#FFF" }, 'fast');
+	});
+}
+
+/*
+ * make file upload werk, with hidden input@file
+ */
+function makeUploadValueBox($newin, field)
+{
+	//
+	// activate the browse button
+	//
+	$newin.find('input').click(function(){
+		$whichin = $(this);
+		$.ajax({
+			url:'/browse' + which_route + '?subdir=' + field.uploadpath,
+			cache:false,
+			beforeSend:function(jqXHR, settings){
+				settings['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest';
+			},
+			success:function(ajaxdata, txtsts, jqXHR){
+				var file_list = $.parseJSON(ajaxdata);
+				if (file_list != null) {
+					$m = $("<div class='modal_file_list'>");
+					$t = $("<p class='title_file_list'>Select a file from the list, or "
+ + "<input type='button' class='decoy' style='margin-top:1em;margin-bottom:1em' value='upload'/>"
+ + "<input type='file' id='fileupload_" + field.name + "' name='fileupload_" + field.name + "' style='width:0px; height:0px;'/>"
+ + " your own.</p>");
+					$t.append("<div><div class='filelist_name'>Name</div> <div class='filelist_size'>Size</div> <div class='filelist_date'>Date</div></div>");
+					$m.append($t);
+					$m.append('<div id="file_list_close" class="button-close"></div>');
+					$b = $("<div class='file_list_list'>");
+					$m.append($b);
+					$('body').append($m);
+
+					$('div#file_list_close').click(function(){
+						$m.remove();
+					}).animate({opacity:'0.5'}, 1234)
+					.hover(function(){ $(this).stop().animate({opacity:'1'}, 123); }
+						  ,function(){ $(this).stop().animate({opacity:'0.5'}, 1234); })
+
+					addFiles(file_list, $b, function(fn){
+						$whichin.val(fn);
+						$m.remove();
+					});
+
+					// sortable columns
+					$t.find('div div').click(function(){
+						var sortup=true;
+						var new_list;
+						var cname = $(this).attr('class');
+						var jname = cname.substr(cname.indexOf('filelist_'));
+						var i = jname.indexOf(' ');
+						if (i>0) jname = jname.substr(0, i);
+						if ($(this).hasClass('sortup')) {
+							$(this).removeClass('sortup');
+							sortup = false;
+						} else $(this).addClass('sortup');
+						new_list = file_list;
+						new_list = _.sortBy(file_list, function(f) {
+							if (!sortup) {
+								if (jname == 'filelist_size') { // size is a number
+									return -f[jname];
+								} else {
+									return _.map(f[jname].split(''), function(c){ return 0xffff - c.charCodeAt(); }); // _ reverse string sort!
+								}
+							} else {
+								return f[jname];
+							}
+						});
+						$b.html('');
+						addFiles(new_list, $b, function(fn){
+							$whichin.val(fn);
+							$m.remove();
+						});
+					});
+
+					// upload button
+					$t.find('input.decoy').click(function(){
+						$(this).next().click().change(function(){
+							var fn = $(this).val();
+							while ((i = fn.indexOf('\\')) >= 0)
+								fn = fn.substr(i+1);
+							while ((i = fn.indexOf('/')) >= 0)
+								fn = fn.substr(i+1);
+							$whichin.val(fn);
+
+							var xhr2 = new XMLHttpRequest();
+							var uri = '/upload' + which_route + '?subdir=' + field.uploadpath;
+							xhr2.open('POST', uri, true);
+
+							xhr2.upload.addEventListener('error', function(){ uploadBad($whichin); }, false);
+							xhr2.upload.addEventListener('abort', function(){ uploadBad($whichin); }, false);
+							xhr2.upload.addEventListener('progress', function(){ uploadProgress($whichin); }, false);
+							xhr2.onload = function(e){
+								if (xhr2.status != 200) alert('Error: ' + xhr2.status);
+								$whichin.val(xhr2.getResponseHeader('final-filename')).addClass('altered');
+								uploadGood($whichin);
+								$m.remove();
+							};
+
+						xhr2.setRequestHeader("Cache-Control", "no-cache");
+						xhr2.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+						xhr2.setRequestHeader("X-File-Name", fn);
+
+							xhr2.send(this.files[0]);
+							return false;
+						});
+
+						return false;
+					});
+
+				}
+			},
+
+			error:function(jqXHR, ststxt, err){
+				/* alert('AJAX ERROR: ' +ststxt + ':' + err); */
+			}
+		});
+		return false;
+	});
+
+}
+
+
+function padStr(i) { return (i < 10) ? "0" + i : "" + i; }
+function date2str(d) {
+	if (d) {
+		if (d && d.getMonth) { // good enuff test for Date?
+			d = d.getFullYear() + '-' + padStr(1 + d.getMonth()) + '-' + padStr(d.getDate());
+		} else if (d.length) {
+			d = d.substr(0, d.indexOf('T'));
+		}
+	}
+	return d;
+}
+
+//
+// makes the value (data entry) input or widget for each field
+//
+function makeValueBox(field, $where, eto_i) {
+var $newin;
+
+	/* create input element */
+
+	switch (field.editflags) {
+		case 'textarea':
+			$newin = $('<textarea rows="3" cols="64" name="' + field.name + '" id="input_' + field.name + '"></textarea>');
+			break;
+
+		case 'richtext':
+			$newin = $('<textarea class="enrichme" name="' + field.name + '" id="input_' + field.name + '"></textarea>');
+			break;
+
+		case 'upload':
+			if (! field.uploadpath)
+				field.uploadpath='upload';
+			$newin = $('<div class="uploadfields"><span class="uploadurl">...</span>&nbsp;/<span class="uploadpath">' + field.uploadpath + '</span>/&nbsp;'
+					+ '<input type="text" name="' + field.name + '" id="input_' + field.name + '"></input>'
+					+ '</div>');
+			break;
+
+		case 'date':
+			$newin = $('<input type="text" name="' + field.name + '" id="input_' + field.name + '"></input>');
+			break;
+
+		default:
+			$newin = $('<input type="text" name="' + field.name + '" id="input_' + field.name + '"></input>');
+	}
+
+	$where.append($newin);
+	var h = findInstanceFieldHeight(field);
+	$newin.add($where).height(h).width(field.editwidth);
+	$('div#instance_' + field.name).height(h);
+
+	/* setup validation handling */
+
+	if (eto_i >= 0) {
+		var $setthisone, valtoset;
+		if (field.editflags == 'upload')
+			$setthisone = $newin.find('input:first');
+		else $setthisone = $newin;
+		valtoset = admin_table_records[eto_i][field.name];
+
+		if (field.editflags == 'date')
+			valtoset = date2str(valtoset);
+
+		$setthisone.val(valtoset);
+	}
+
+	$newin.width(field.editwidth);
+	if (field.editflags != 'upload')
+		$newin.find('input').width(field.editwidth);
+
+	$newin.change(function(){
+			$(this).addClass('altered');
+			if (validateField($(this), eto_i)) {
+				if (validateForm(eto_i)) {
+					$('button#save').show();
+				}
+			} else {
+				$('button#save').hide();
+			}
+		});
+
+	/*
+ 	 * there's a lot of extra logic for file upload fields.
+ 	 * so let's break it out into a separate function
+ 	 */
+	if (field.editflags == 'upload') 
+		makeUploadValueBox($newin, field);
+	else if (field.editflags == 'date') {
+		$newin.datepicker({ dateFormat: 'yy-mm-dd', defaultDate: $newin.val() });
+	}
+
+	if (adminflag) { // some features only open to admin :
+
+		/* maybe make it resizable */
+
+		if (field.editflags == 'default' || field.editflags == 'textarea' || field.editflags == '') {
+			$where.resizable({
+					handles:'e',
+					minWidth:44,
+					maxWidth:1234,
+					helper:'ghostedinput',
+					stop:function(e, ui) {
+						var $the_in = $(e.target).find('input').add($(e.target).find('textarea'));
+						var id = $the_in.attr('id');
+						id =  id.substr(id.indexOf('_')+1);
+						$the_in.width(_.detect(admin_table_fields, function(f){ return f.name == id; }).editwidth = $(e.target).width());
+						showSave(); // we might want to save any re-arrangement of the fields
+					}
+				});
+		}
+
+		if (field.editflags == 'upload') { // admin can change upload path
+			$newin.find('span.uploadpath').css('color', "#9bd").click(function(){
+				$("<input type='text' class='temp' value='" + $(this).text() + "'>").insertAfter($(this).hide()).focus().blur(function(){
+					var $target = $(this).parent().find('span.uploadpath');
+					if ($target.text() != $(this).val()) {
+						var txt = $(this).val();
+						while (txt.length && (txt.charAt(0) == '/'))
+							txt = txt.substr(1, txt.length-1);
+						while (txt.length && (txt.charAt(txt.length-1) == '/'))
+							txt = txt.substr(0, txt.length-1);
+						$target.text(txt);
+						var id = $(this).parent().parent().attr('id');
+						id =  id.substr(id.indexOf('_')+1);
+						_.detect(admin_table_fields, function(f){ return f.name == id; }).uploadpath = txt;
+						showSave(); // might want to save the new uploadpath
+					}
+					$target.show();
+					$(this).remove();
+				});
+			});
+		}
+	}
+
+	/* add widgets to elements */
+
+	if ($newin.hasClass('enrichme')) {
+		var cki = CKEDITOR.instances['input_' + field.name];
+		if (cki) cki.destroy();
+		$newin.ckeditor(function(){
+									var spanid = this.container.$.id;
+									var $instance = $('#'+spanid).parent();
+									var h = $('#'+spanid).height();
+									spanid = spanid.substr(spanid.indexOf('input_')+6);
+									var field = _.detect(admin_table_fields, function(f) { return f.name == spanid; });
+									if (field.editheight) {
+										h = field.editheight;
+										$('#'+spanid).height(h);
+										this.resize(field.editwidth, field.editheight);
+									}
+									$instance.height(h);
+									$('div#instance_'+spanid).height(h);
+								}, {
+									skin:'v2',
+									filebrowserBrowseUrl : '/ck_browse',
+									filebrowserUploadUrl : '/ck_upload',
+								});
+		cki = CKEDITOR.instances['input_' + field.name];
+		if (cki) {
+			cki.on('resize', function(e){
+				var f_id = this.container.$.id;
+				var i = f_id.indexOf('input_')+6;
+				f_id = f_id.substr(i);
+				var field = _.detect(admin_table_fields, function(f) { return f.name == f_id; });
+				var w = $(e.editor.getResizable().$).width();
+				var h = $(e.editor.getResizable().$).height();
+				if (adminflag && (w != field.editwidth || h != field.editheight)) {
+					field.editwidth = w;
+					field.editheight = h;
+					showSave();
+				}
+				$('div#instance_' + field.name).height(field.editheight);
+				$('div#instin_' + field.name).height(field.editheight);
+
+				e.editor.resetDirty();
+				return false;
+			});
+		}
+		$where.width('999px');
+	}
+}
+
 function drawValueBox() {
 var $vb = $('<div class="instanceinputs"></div>');
 var $eto = $('.edit_this_one');
 var eto_i = -1;
-var $newin;
 
 	$allrs = $('div.admin_table_record');
 	if ($eto.length)
@@ -289,64 +658,53 @@ var $newin;
 				break;
 			}
 	$('div.instanceinputs').remove();
+	$('div#detailtab').append($vb);
 	var sorted = _.sortBy(admin_table_fields, function(f) { return f.editorder; });
 	_.each(sorted, function(field) {
 		if (field.edited && field.name != 'id' && field.name != '_id') {
-			$newin = $('<div class="instanceinput"><input type="text" name="' + field.name + '" id="input_' + field.name + '"></input></div>');
-			if (eto_i >= 0)
-				$newin.find('input').val(admin_table_records[eto_i][field.name])
-			$newin.height(findInstanceFieldHeight(field)).width(field.editwidth).find('input').width(field.editwidth)
-			.change(function(){
-					$(this).addClass('altered');
-					if (validateField($(this), eto_i)) {
-						if (validateForm(eto_i)) {
-							$('button#save').show();
-						}
-					} else {
-						$('button#save').hide();
-					}
-				});
-			if (adminflag)
-				$newin.resizable({
-						handles:'e',
-						minHeight:$(this).height(),
-						maxHeight:$(this).height(),
-						minWidth:44,
-						maxWidth:1234,
-						helper:'ghostedinput',
-						stop:function(e, ui) {
-							var $the_in = $(e.target).find('input');
-							var id = $the_in.attr('id');
-							id =  id.substr(id.indexOf('_')+1);
-							$the_in.width(_.detect(admin_table_fields, function(f){ return f.name == id; }).editwidth = $(e.target).width());
-							showSave();
-						}
-					});
-			$vb.append($newin);
+			var $commontainer = $('<div class="instanceinput" id="instin_' + field.name + '"></div>');
+			$vb.append($commontainer);
+			makeValueBox(field, $commontainer, eto_i);
 		}
 	});
-
-	$('div#othermaintab').append($vb);
 	$vb.append('<button id="save">Save</button><button id="cancel">Cancel</button>"');
 
 	$('button#cancel').click(function(){ hideInstancePage(); });
 	$('button#save').click(function(){
 		var newobj = {};
-		$('.instanceinput input.altered').each(function(){
+		for ( instance in CKEDITOR.instances ) {
+			if (CKEDITOR.instances[instance].checkDirty()) {
+				CKEDITOR.instances[instance].updateElement();
+				$('#'+instance).addClass('altered');
+			}
+		}
+		$('.instanceinput .altered').each(function(){
 			var fieldname = $(this).attr('id');
 			fieldname = fieldname.substr(fieldname.indexOf('_')+1);
-			newobj[fieldname] = $(this).val();
+			var field = _.detect(admin_table_fields, function(f) { return f.name == fieldname; });
+			if (field.editflags == 'date') {
+				newobj[fieldname] = new Date($(this).val());
+			} else newobj[fieldname] = $(this).val();
 			if (eto_i >= 0) {
 				admin_table_records[eto_i][fieldname] = newobj[fieldname];
-				$eto.find('div.record_field_'+fieldname).html(newobj[fieldname]);
+				$eto.find('div.record_field_'+fieldname).text($(this).val());
 			}
 		});
-		
+		$('input.hasDatepicker').each(function(){
+			$(this).datepicker('destroy');
+		});
 		if (eto_i >= 0) {
-			updateInstance(admin_table_records[eto_i]['_id'], newobj, function(){
-				$eto.removeClass('edit_this_one').addClass('already_edited');
-				hideInstancePage();
-			});
+			if (admin_table_records[eto_i]['modified_date']) {
+				var nowtoday = new Date();
+				admin_table_records[eto_i]['modified_date'] = nowtoday;
+				$eto.find('div.record_field_modified_date').text(date2str(nowtoday));
+			}
+			setTimeout(function(){
+				updateInstance(admin_table_records[eto_i]['_id'], newobj, function(){
+					$eto.removeClass('edit_this_one').addClass('already_edited');
+					hideInstancePage();
+				});
+			}, 23);
 		} else {
 			addInstance(newobj, function(){
 				drawListPage();
@@ -356,36 +714,50 @@ var $newin;
 }
 
 function fadeInListPage() {
-	$('div#maintab').stop().animate({ opacity: 'show' }, 666);
+	$('div#maintab').addClass('current').stop().animate({ opacity: 'show' }, 666, function() {
+		showPlusButt();
+	});
 }
 
 function fadeOutListPage() {
-	$('div#maintab').stop().animate({opacity:'hide'}, 666);
+	$('div#maintab').removeClass('current').stop().animate({opacity:'hide'}, 666);
 }
 
 function scrollDownInstancePage() {
-	$('div#othermaintab').stop().animate({ top: '1234px'}, 666, function() {
+	$('div#detailtab').removeClass('current').stop().animate({ top: '1234px'}, 666, function() {
 		$(this).css('display','none').html('');
 	});
 }
 
 function scrollUpInstancePage() {
-	$('div#othermaintab').stop().css('display','block').animate({ top: '99px'}, 666);
+	$('div#detailtab').addClass('current').stop().css('display','block').animate({ top: '99px'}, 666, function(){
+		showPlusButt();
+	});
 }
 
 function scrollUpWindow() {
-//	$('html, body').animate({ scrollTop: 0 }, 666);
+	$('html, body').animate({ scrollTop: 0 }, 666);
+}
+
+function destroyRichEditors() {
+var i, cki;
+	for (cki in CKEDITOR.instances) {
+		i = CKEDITOR.instances[cki];
+		i.destroy(false);
+	}
 }
 
 function hideInstancePage() {
-	if ($('div#othermaintab').css('display') != 'none') {
+	if ($('div#detailtab').css('display') != 'none') {
 		scrollUpWindow();
 		scrollDownInstancePage();
 		fadeInListPage();
 	}
+	destroyRichEditors();
 }
 
 function drawInstancePage() {
+	destroyRichEditors();
 	drawFieldBox();
 	drawValueBox();
 	scrollUpWindow();
@@ -414,6 +786,65 @@ function drawListPage() {
  */
 
 
+function closeContextMenu() {
+	$('div#context-menu').html('').fadeOut();
+	return false;
+}
+
+function showContextMenu(field_id) {
+console.log(field_id);
+var $loc = $('div#'+field_id+' >div');
+	$('div#context-menu').html('<div id="context-menu-close" class="button-close"></div><div id="context-menu-fields"></div>')
+						.css({left:23+$loc.offset().left, top:$loc.offset().top});
+	_.each(edit_flags, function(flag) {
+			$f = $('<div class="context-field" id="' + field_id.substr(9) + '_context_' + flag.name + '"></div>');
+			$f.html(flag.title);
+			$('div#context-menu-fields').append($f);
+	});
+	$('div.context-field').hover(function(){ $(this).css('background-color', '#fff'); }
+			,function(){ $(this).css('background', 'transparent'); }
+	 ).click(function(){
+		var field, f_id, flag_name, i, $eto, eto_i;
+
+		$eto = $('.edit_this_one');
+		eto_i = -1;
+		f_id = $(this).attr('id');
+		i = f_id.indexOf('_context_');
+		flag_name = f_id.substr(i+9);
+		f_id = f_id.substr(0, i);
+
+		field = _.detect(admin_table_fields, function(f) { return f.name == f_id; });
+
+		if (field.editflags != flag_name) {
+			field.editflags = flag_name;
+			showSave();
+
+			// redraw input
+			//
+			// after removing what's there, we might need to abstract out guts of drawvaluebox to get the field redrawn
+			// then might want to recalc the height of the corresponding label ...
+
+			$allrs = $('div.admin_table_record');
+			if ($eto.length)
+				for (i=0; i < $allrs.length; i++)
+					if ($eto[0] == $allrs[i]) {
+						eto_i = i;
+						break;
+					}
+
+			$where = $('div#instin_' + field.name);
+			$where.empty();
+			makeValueBox(field, $where, eto_i);
+		}
+		return closeContextMenu();
+	});
+	$('div#context-menu').fadeIn(666, function(){
+									$('div#context-menu-close').animate({opacity:'1'}, 1234).click(closeContextMenu);
+											});
+}
+
+
+
 function closePlusMenu() {
 	$('div#plus-menu').html('').fadeOut();
 	return false;
@@ -421,9 +852,10 @@ function closePlusMenu() {
 
 function showPlusMenu() {
 	$('div#plus-menu').html('<div id="plus-menu-close" class="button-close"></div><div id="plus-menu-fields"></div>')
-						.css({left:$('div#plusbutt').offset().left, top:$('div#plusbutt').offset().top});
+						.css({left:$('div.current div.plusbutt').offset().left, top:$('div.current div.plusbutt').offset().top});
 	_.each(admin_table_fields, function(field) {
-		if (!field.listed) {
+		if ($('div#maintab').hasClass('current') && !field.listed
+		|| $('div#detailtab').hasClass('current') && !field.edited) {
 			$f = $('<div class="plus-field" id="plus_menu_field_' + field.name + '"></div>');
 			$f.html(field.name);
 			$('div#plus-menu-fields').append($f);
@@ -438,7 +870,7 @@ function showPlusMenu() {
 
 		listedlist = _.select(admin_table_fields, function(f) { return f.listed; });
 		field.listed = true;
-		unlistedlist = _.reject(admin_table_fields, function(f) { return f.listed; });
+		unlistedlist = _.reject(admin_table_fields, function(f) { return f.listed || f.name == 'id' || f.name == '_id'; });
 		listedlist.push(field);
 		admin_table_fields = listedlist.concat(unlistedlist);
 
@@ -455,17 +887,22 @@ function showPlusMenu() {
 }
 
 function showPlusButt() {
-	if (_.all(admin_table_fields, function(f){ return f.listed })) {
-		$('div#plusbutt').fadeOut();
-	} else $('div#plusbutt').fadeIn(666, function(){ $('div#plusbutt').animate({opacity:'0.5'}, 1234); });
+	if ($('div#maintab').hasClass('current')) {
+		if (_.all(admin_table_fields, function(f){ return f.listed || f.name == '_id' || f.name == 'id' })) {
+			$('div.current div.plusbutt').fadeOut();
+		} else $('div.current div.plusbutt').fadeIn(666, function(){ $('div.current div.plusbutt').animate({opacity:'0.5'}, 1234); });
+	} else {
+		if (_.all(admin_table_fields, function(f){ return f.edited || f.name == '_id' || f.name == 'id' })) {
+			$('div.current div.plusbutt').fadeOut();
+		} else $('div.current div.plusbutt').fadeIn(666, function(){ $('div.current div.plusbutt').animate({opacity:'0.5'}, 1234); });
+	}
 }
 
-function setupPlusButt(wtf) {
-	$('div#plusbutt').css({opacity:'0.5'})
-		.hover(function(){ $('div#plusbutt').stop().animate({opacity:'1'}, 123); }
-			  ,function(){ $('div#plusbutt').stop().animate({opacity:'0.5'}, 1234); })
+function setupPlusButt($plusbutt, wtf) {
+	$plusbutt.find('div.plusbutt').css({opacity:'0.5'})
+		.hover(function(){ $('div.current div.plusbutt').stop().animate({opacity:'1'}, 123); }
+			  ,function(){ $('div.current div.plusbutt').stop().animate({opacity:'0.5'}, 1234); })
 		.click(function(){ wtf(); return false; });
-	showPlusButt();
 }
 
 
@@ -475,8 +912,6 @@ function makeFieldResizable($f) {
 	$f
 	.resizable({
 		handles:'e',
-		minHeight:$(this).height(),
-		maxHeight:$(this).height(),
 		minWidth:44,
 		maxWidth:444,
 		alsoResize:'.record_' + $f.attr('id'),
@@ -578,6 +1013,7 @@ function sortableNewField($f) {
 }
 
 
+
 /*
  * draw the data that corresponds to the (previously hidden) field which we just added
  */
@@ -585,7 +1021,10 @@ function drawNewColumn(field) {
 	$allrs = $('div.admin_table_record');
 	for (i=0; i < $allrs.length; i++) {
 		$f = $('<div class="admin_table_record_field record_field_' + field.name + '"></div>');
-		$f.width(field.listwidth).html(admin_table_records[i][field.name]);
+		$f.width(field.listwidth);
+		if (field.editflags == 'date')
+			$f.text(date2str(admin_table_records[i][field.name]));
+		else $f.html(admin_table_records[i][field.name]);
 		$($allrs[i]).append($f);
 	}
 }
@@ -615,9 +1054,18 @@ var field;
 		$allrs.append($r);
 
 		_.each(admin_table_fields, function(field) {
+			var list_content;
 			if (field.listed) {
+				if (field.editflags == 'date') {
+					list_content = date2str(admin_table_records[i][field.name]);
+				} else {
+					list_content = admin_table_records[i][field.name];
+					if (list_content)
+						if (list_content.length > 69)
+							list_content = list_content.substr(0,69);
+				}
 				$f = $('<div class="admin_table_record_field record_field_' + field.name + '"></div>');
-				$f.width(field.listwidth).html(admin_table_records[i][field.name]);
+				$f.width(field.listwidth).text(list_content);
 				$r.append($f);
 			}
 		});
@@ -629,7 +1077,7 @@ var field;
 			function() { if (!$(this).is(':checked')) $(this).animate({opacity:'1'}, 333); }
 		  , function() { if (!$(this).is(':checked')) $(this).animate({opacity:'0'}, 123); }
 	).click(function(e){
-		if ($('.deleteme:checked').length) $('button#less').show().click(function() { delData(); });
+		if ($('.deleteme:checked').length) $('button#less').show();
 		else $('button#less').hide();
 		e.stopPropagation();
 	});
@@ -637,7 +1085,8 @@ var field;
 	$allrs.append('<div id="addmore"></div>');
 
 	$('div#addmore').append('<button id="less">DELETE</button>');
-	if ($('.deleteme:checked').length) $('button#less').show().click(function() { delData(); });
+	if ($('.deleteme:checked').length) $('button#less').show();
+	$('button#less').click(function() { delData(); return false; });
 
 	if (i-pos == 20) { // we got another full 20 records
 		$('div#addmore').append('<button id="more">More ...</button>');
@@ -706,14 +1155,15 @@ function getData() {
 function addNewField(field) {
 	$f = $('<div id="field_' + field.name + '" class="admin_table_field"></div>');
 	$f.width(field.listwidth).html(field.name);
-	if (($p = $('div#plusbutt')).length)
+	if (($p = $('div.current div.plusbutt')).length)
 		$p.before($f);
 	else $('div.admin_table_fields').append($f);
 	$f.append('<div id="desc-' + field.name + '" class="button-desc"></div>'
 		 +'<div id="asc-' + field.name + '" class="button-asc"></div>');
-	if (adminflag)
-		 $f.append('<div id="close-' + field.name + '" class="button-close"></div>');
-	setupNewListField($f);
+	if (adminflag) {
+		$f.append('<div id="close-' + field.name + '" class="button-close"></div>');
+		setupNewListField($f);
+	}
 	sortableNewField($f);
 	return $f;
 }
@@ -731,8 +1181,8 @@ var field;
 	});
 
 	if (adminflag) {
-		$('div.admin_table_fields').append('<div id="plusbutt"></div>');
-		setupPlusButt(showPlusMenu);
+		setupPlusButt( $('div.admin_table_fields').append('<div class="plusbutt"></div>'), showPlusMenu );
+		showPlusButt();
 	}
 }
 
@@ -787,4 +1237,8 @@ var $b = $('button#loginlogout')
 mysammyinstance = swxmoUpdate(callBefore, callAfter);
 $('button#loginlogout').click(function() { logOut(); });
 
+$.getScript('http://la.rrak.in/ckeditor/ckeditor.js', function(){
+	$.getScript('http://la.rrak.in/ckeditor/adapters/jquery.js', function(){
+	});
+});
 
