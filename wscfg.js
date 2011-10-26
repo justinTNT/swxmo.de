@@ -15,7 +15,7 @@ options.clandestine="You'll>never<guess,";
 // map domain names to app names.
 
 options.apps = [	{ dname:'la.rrak.in', appname:'static' }
-				  , { dname:'larrak.in', appname:'poliwatch' }
+				  , { dname:'larrak.in', appname:'justat' }
 	];
 
 
