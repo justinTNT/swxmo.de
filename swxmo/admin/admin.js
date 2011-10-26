@@ -5,6 +5,7 @@ var	os = require('os')
  ,	_ = require('underscore')
  , fs = require('fs')
  , sys = require('sys')
+ , formidable = require('formidable')
 ;
 
 require('./schema/admin');
@@ -18,7 +19,7 @@ var Fields = admdb.model('SWXadmFields');
  * this convoluted conclusion to the very simple file load
  * is cos we might want to rename it if it already exists ...
  */
-function finishFileLoad(from, to, count, res) {
+function finishFileLoad(from, to, count, cb) {
 	fs.stat(to, function(err, stats){
 		var i;
 		if (!err) {
@@ -34,8 +35,7 @@ function finishFileLoad(from, to, count, res) {
 			fs.rename(from, to);
 			while ((i = to.indexOf('/')) >= 0)
 				to = to.substr(i+1);
-			res.writeHead(200, {'content-type': 'text/plain', 'final-filename': to});
-			res.end(); 
+			cb(to);
 		}
 	});
 }
@@ -65,6 +65,32 @@ function requiresLogin(req, res, next) {
 		next();
 	} else res.redirect('/sessions/new');
 };
+
+
+function STRstatdirlist(path, files, stats, cb) {
+	if (files.length) {
+		var fn = files.shift();
+		fs.stat(path+fn, function(err, s) {
+			if (!err) {
+				var mt = JSON.stringify(s.mtime);
+//				mt = mt.substr(mt.indexOf(' ')+1, mt.indexOf(':') - 7);
+				stats.push({filelist_name:fn, filelist_date:mt, filelist_size:s.size});
+			}
+			STRstatdirlist(path, files, stats, cb);
+		});
+	} else cb(stats);
+}
+
+function statdirlist(path, files, stats, cb) {
+	if (files.length) {
+		var fn = files.shift();
+		fs.stat(path+fn, function(err, s) {
+			if (!err && s.isFile())
+				stats.push({filelist_name:fn, filelist_date:s.mtime, filelist_size:s.size});
+			statdirlist(path, files, stats, cb);
+		});
+	} else cb(stats);
+}
 
 
 module.exports = function(e){
@@ -104,6 +130,35 @@ module.exports = function(e){
 	}
 
 
+	env.app.get('/ck_browse', requiresLogin, function(req,res) {
+		var topath = process.cwd() + '/apps/static/public/' + env.targetapp + '/admcke/';
+		fs.readdir(topath, function(err, files) {
+			var temps = [{selector:'#maintab', filename:'filebrowse.htm'}];
+			var browsebase = [ {selector:'#boilerplate-container', filename:'browse.htm'} ];
+			var url = 'http://' + env.staticurl + '/' + env.targetapp + '/admcke/';
+			STRstatdirlist(topath, files, [], function(stats) {
+				env.respond(req, res, browsebase, temps, {hidden_url:url, file_list_file:stats}, 'browse.tpl');
+			});
+		});
+	});
+
+	env.app.post('/ck_upload', requiresLogin, function(req,res) {
+		var topath = process.cwd() + '/apps/static/public/' + env.targetapp + '/admcke/'
+		var form = new formidable.IncomingForm();
+		var funcNum = req.param('CKEditorFuncNum');
+		var url = 'http://' + env.staticurl + '/' + env.targetapp + '/admcke/';
+		form.parse(req, function(err, fields, files) {
+			finishFileLoad(files.upload.path, topath + files.upload.name, 0, function(to) {
+				res.write("<script type='text/javascript'> window.parent.CKEDITOR.tools.callFunction(" + funcNum + ", '" + url + files.upload.name + "', '');</script>");
+				res.end(); 
+			});
+		});
+    return;
+
+
+ 
+	});
+
 	env.app.get("/list", requiresLogin, function(req, res, next){
 		Fields.distinct('table', {appname:env.targetapp}, function(err, docs) {
 			if (err) throw err;
@@ -120,23 +175,6 @@ module.exports = function(e){
 		});
 	});
 
-
-	env.app.get("/:table", requiresLogin, function(req, res, next){
-		var app;
-		if (req.params.table.indexOf('.') > 0)
-			next(); // not really a table name, prolly favicon.ico ...
-		else {
-			if (req.session.user.login == 'admin' && req.params.table == 'admin')
-				app = 'admin';
-			else app = env.targetapp;
-			Fields.find({ appname : app, table : req.params.table})
-				.sort('listorder', 1).run(function(err, docs) {
-					if (err) throw err;
-					_.each(docs, function(d) { delete d.appname; delete d.table; });
-					env.respond(req, res, null, null, docs);
-				});
-		}
-	});
 
 	env.app.get("/:table/list/:skip", requiresLogin, onlyAdminCanAdminAdmin, function(req, res, next){
 			req.params.theTable.find({}).limit(20).skip(req.params.skip).run(function(err, docs) {
@@ -158,45 +196,53 @@ module.exports = function(e){
 		var o = JSON.parse(req.body.obj);
 		if (req.params.table == 'admin')
 			o.appname = env.targetapp;
-		new req.params.theTable(o).save(function(err){
-			if (err) {
-				// if it is a validation error, send something sensible back to the client...
-				throw err;
-			}
-			res.send('OK');	
-		});
+
+		Fields.find({ appname : env.targetapp, table : req.params.table})
+			.run(function(err, docs) {
+				if (err) throw err;
+				for (key in docs) {
+					if (docs[key].name == 'modified_date' || docs[key].name == 'created_date') {
+						o[docs[key].name] = new Date();
+					}
+				}
+
+				new req.params.theTable(o).save(function(err){
+					if (err) {
+						// if it is a validation error, send something sensible back to the client...
+						throw err;
+					}
+					res.send('OK');	
+				});
+			});
 	});
 
 	env.app.post("/update/:table", requiresLogin, onlyAdminCanAdminAdmin, function(req, res, next){
 		var id = req.body.id;
 		var o = JSON.parse(req.body.obj);
-		req.params.theTable.update({_id:id}, o, function(err){
-			if (err) {
-				// if it is a validation error, send something sensible back to the client...
-				throw err;
-			}
-			res.send('OK');	
-		});
+		Fields.find({ appname : env.targetapp, table : req.params.table})
+			.run(function(err, docs) {
+				if (err) throw err;
+				for (key in docs) {
+					if (docs[key].name == 'modified_date') {
+						o[docs[key].name] = new Date();
+					}
+				}
+
+				req.params.theTable.update({_id:id}, o, function(err){
+					if (err) {
+						// if it is a validation error, send something sensible back to the client...
+						throw err;
+					}
+					res.send('OK');	
+				});
+			});
 	});
 
 	env.app.post("/remove_from/:table", requiresLogin, onlyAdminCanAdminAdmin, function(req, res, next){
 		var ids = JSON.parse(req.body.id_array);
-/*
-		for (i=ids.length-1; i>=0; i--)
-			req.params.theTable.remove({_id:ids[i]}, function(err, docs){
-				if (err) throw err;
-			});
-*/
-console.log(ids.length);
-for (i=ids.length-1; i>=0; i--)
-	console.log(ids[i]);
-
 		req.params.theTable.remove({_id:{$in:ids}}, function(err, docs){
 				if (err) {
-					console.log('error');
 					throw err;
-				} else {
-					console.log('ok ' + docs.length);
 				}
 			});
 
@@ -244,6 +290,15 @@ for (i=ids.length-1; i>=0; i--)
 		res.redirect('/sessions/new');
 	});
 
+	env.app.get('/browse/:where', requiresLogin, function(req,res) {
+		var topath = process.cwd() + '/apps/static/public/' + env.targetapp + '/' + req.param('subdir') + '/';
+		fs.readdir(topath, function(err, files) {
+			if (files) {
+				statdirlist(topath, files, [], function(stats) { env.respond(req, res, null, null, stats); });
+			} else env.respond(req, res, null, null, null);
+		});
+	});
+
 	env.app.post('/upload/:where', requiresLogin, function(req,res) {
 		var topath = process.cwd() + '/apps/static/public/' + env.targetapp + '/' + req.param('subdir') + '/';
 		var frompath = '/tmp/' + req.params.where + '_';
@@ -255,9 +310,39 @@ for (i=ids.length-1; i>=0; i--)
 		}); 
 		req.addListener('end', function() { 
 			filestream.end();
-			finishFileLoad(frompath + filename, topath + filename, 0, res);
+			finishFileLoad(frompath + filename, topath + filename, 0, function(to) {
+				res.writeHead(200, {'content-type': 'text/plain', 'final-filename': to});
+				res.end(); 
+			});
 	   }); 
 	});
+
+
+	/*
+ 	 * note: this comes last to ensure it doesn't hijack single-word routes
+ 	 */
+	env.app.get("/:table", requiresLogin, function(req, res, next){
+		var app;
+		if (req.params.table.indexOf('.') > 0)
+			next(); // not really a table name, prolly favicon.ico ...
+		else {
+			if (req.session.user.login == 'admin' && req.params.table == 'admin')
+				app = 'admin';
+			else app = env.targetapp;
+			Fields.find({ appname : app, table : req.params.table})
+				.sort('listorder', 1).run(function(err, docs) {
+					if (err) throw err;
+					_.each(docs, function(d) { delete d.appname; delete d.table; });
+					env.respond(req, res, null, null, docs);
+				});
+		}
+	});
+
+/*
+	env.app.get("*", function(req, res){
+		res.send('huh?', 404);
+	});
+*/
 
 	return env;
 };
