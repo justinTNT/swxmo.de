@@ -1,33 +1,4 @@
 
-/* is this just for django?
- * maybe I can lose it ...
- */
-
-$.ajaxSetup({ 
-	beforeSend: function(xhr, settings) {
-		function getCookie(name) {
-			var cookieValue = null;
-			if (document.cookie && document.cookie != '') {
-				var cookies = document.cookie.split(';');
-				for (var i = 0; i < cookies.length; i++) {
-					var cookie = jQuery.trim(cookies[i]);
-					// Does this cookie string begin with the name we want?
-					if (cookie.substring(0, name.length + 1) == (name + '=')) {
-						 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-						 break;
-					}
-				}
-			}
-			return cookieValue;
-		}
-		if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
-			// Only send the token to relative URLs i.e. locally.
-			xhr.setRequestHeader("X-CSRFToken", getCookie('csrftoken'));
-		}
-	} 
-});
-
-
 function updateLinks(frag){
 	frag.find('a:urlInternal').each(function() {			// all internal links,
 		if (! $(this).hasClass('hardlink')) {
@@ -48,6 +19,32 @@ function updateLinks(frag){
 	});
 }
 
+/*
+ * we mostly do ajaj (Asynchronous Json, Assisted by Javascript)
+ * and this wrapper helps make it smooth
+ */
+function swxmoAJAJ (route, succ, fail, data) {
+	$.ajax({
+		url:route,
+		cache:false,
+		type:(data ? 'POST' : 'GET'),
+		data:data,
+		beforeSend:function(jqXHR, settings){
+			settings['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest';
+		},
+		success:function(ajaxdata, txtsts, jqXHR){
+			if (ajaxdata == 'OK') succ();
+			else succ($.parseJSON(ajaxdata));
+		},
+		error:function(jqXHR, ststxt, err){
+/*
+* DEBUGGING
+				alert('AJAX ERROR for ' + route + ': ' + ststxt + ':' + err);
+*/
+			fail(jqXHR.responseText, err);
+		}
+	});
+}
 
 
 /*
@@ -71,15 +68,8 @@ function swxmoUpdate (callBefore, callBack){
 
 		this.get(/.*\#(.*)/, function() {
 			servercall = this.params['splat'];
-			$.ajax({
-				url:servercall,
-				cache:false,
-				beforeSend:function(jqXHR, settings){
-					settings['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest';
-				},
-				success:function(ajaxdata, txtsts, jqXHR){
-					// get tpls, objs from data
-					var txdata = $.parseJSON(ajaxdata);
+			swxmoAJAJ(servercall,
+				function(txdata){
 					var $dest_cont = $('div#boilerplate-container');
 					var $temp_cont;
 	
@@ -101,19 +91,12 @@ function swxmoUpdate (callBefore, callBack){
 						}, $temp_cont);
 
 					}
-
-				},
-				error:function(jqXHR, ststxt, err){
-/*
- * DEBUGGING
-							alert('AJAX ERROR: ' +ststxt + ':' + err);
-							$('div#container').html(jqXHR.responseText);
- */
+				}, function(ststxt, err){
 					location.href=servercall; // force refresh on ajax error
-				}
-			});
+				});
 		});
 	}).run();
 
 }
+
 
