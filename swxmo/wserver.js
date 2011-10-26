@@ -21,6 +21,7 @@ function configureAppEnv(e) {
 		e.respond(req, res, e.basetemps);
 	});
 	e.app.configure(function(){						// and this serves up some browser scripts, css, etc
+		e.app.use(express.staticCache());
 		e.app.use('/browser/', express.static(e.dir + '/browser/'));
 	});
 
@@ -47,6 +48,7 @@ var eachapp, e;
 		e=eachapp.env;
 		if (e) {
 			e.appname = applist[l].appname;
+			e.url = applist[l].dname;
 			eachapp.app = configureAppEnv(e);
 
 			this_admin_app = configureAppEnv(require('./admin/admin')(e));
