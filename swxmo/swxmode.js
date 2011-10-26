@@ -14,26 +14,53 @@ var jsdom = require('jsdom')
  * selection : the item
  */
 function weldItem (dat, selection) {
-	for (keyatt in dat) {
-	var tmpa = keyatt.split('.')
-	 ,  key = tmpa[0]
-	 ,  attrib = tmpa[1]		// recognises key.attribute
-	 ,  styl = tmpa[2]		// recognises key..style or key.ignorethis.style
-	 ,  $item;
+	if (typeof dat == 'string') {
+		selection.html(dat);
+	} else {
+		for (keyatt in dat) {
+		var tmpa = keyatt.split('.')
+		 ,  key = tmpa[0]
+		 ,  attrib = tmpa[1]		// recognises key.attribute
+		 ,  styl = tmpa[2]		// recognises key..style or key.ignorethis.style
+		 ,  $item;
 
-		if (selection.hasClass(key) || selection.attr('id') == key)
-			$item = selection;
-		else {
-			$item = selection.find("#" + key);
-			if (! $item.length) $item = selection.find("." + key);
-		}
-		if ($item.length) {
-			var str = dat[keyatt];
-			if (styl) {
-				tmpstyle = $item.attr('style') || "";
-				$item.attr('style', styl + ':' + str + ';' + tmpstyle);
-			} else if (attrib) $item.attr(attrib, str);
-			else $item.html(str);
+			if (selection.hasClass(key) || selection.attr('id') == key)
+				$item = selection;
+			else {
+				$item = selection.find("#" + key);
+				if (! $item.length) $item = selection.find("." + key);
+			}
+			if ($item.length) {
+				var str = dat[keyatt];
+				switch (typeof str) {
+					case 'function':
+						throw 'unexpected function : ' + str.substr(23) + '...';
+						break;
+
+					case 'object':
+						if (str.getMonth) {
+							var y = str.getYear();
+							var m = str.getMonth() + 1;
+							m++;
+							if (m < 10) m = '0'+m;
+							var d = str.getDate() + 1;
+							if (d < 10) d = '0'+d;
+							var d = str.getYear();
+							str = y + ' - ' + m + '-' + d;
+						} else {
+							str = '[ obj ]';
+						}
+						break;
+
+					default:
+				}
+
+				if (styl) {
+					tmpstyle = $item.attr('style') || "";
+					$item.attr('style', styl + ':' + str + ';' + tmpstyle);
+				} else if (attrib) $item.attr(attrib, str);
+				else $item.html(str);
+			}
 		}
 	}
 	selection.addClass('item_welded_on');
@@ -65,13 +92,19 @@ function weldTemps(templates, objects, data, sendEmOff) {
 			$s = $s.not('.item_welded_on');
 			if ($s.length) {
 				dat=objects[sel]
-				if (l=dat.length) {
-					var $thisone=$s, $replacement;
+				if (typeof dat == 'string') {
+					weldItem(dat, $s);
+				} else if (l=dat.length) {
+					var $newone;
 					for (var i=0; i<l; i++) {
-						if (i+1 < l) $replacement = $thisone.clone();
-						weldItem(dat[i], $thisone);
-						if (i) $s.append($thisone);
-						$thisone = $replacement;
+						if (i<l-1) {
+							$newone=$s.clone();
+						}
+						weldItem(dat[i], $s);
+						if (i<l-1) {
+							$s.after($newone);
+							$s=$newone;
+						}
 					}
 				} else weldItem(dat, $s);
 			}
@@ -91,13 +124,30 @@ function weldTemps(templates, objects, data, sendEmOff) {
  * envplates : all templates loaded for this app env
  * templates : list of templates
  * weldFunc : callback.
- * data : the DOM document we're building, or undefined to begin a new one
+ * data : the DOM document we're building, or undefined to begin a new one, or a string to name an alternative boilerplate!
  * header_text : pass along the header to add to the populated template
+ *
+ * this got more complicated when data took on a third state (for alt boilerplate)
+ * so, to spell it out:
+ * we commonly call loadTemps with 3 parameters.
+ * It then loads the default boilerplate into a DOM instance,
+ * and recursively calls itself, stepping through the templates in the second parameter.
+ * BUT
+ * we occassionally may call loadTemps with 4 parameters : the fourth (rare, optional) parameter being an alternative boilerplate filename
+ * When loadTemps calls itself, it passes on the DOM it is building as the fourth parameter, and the HTML up to the end of the head as the fifth.
+ * We need to carry around that string, because of some misbehaviour of jsdom which I can't quite remember right now, which munged the head along the way ...
  */
 function loadTemps(envplates, templates, weldFunc, data, header_text) {
-	if (! data) {
+var hash=null; // boilerplate hash (filename)
+
+	if (! data) {						// no data means use standard boilerplate
+		hash = 'boilerplate.tpl';
+	} else if (typeof data == 'string') {
+		hash = data;
+	}
+	if (hash) {
 		data = $('<html>');
-		str = envplates['boilerplate.tpl'];
+		str = envplates[hash];
 		data[0].innerHTML = "<html>"+str.substr(str.indexOf("</head>")+7);
 		header_text = str.substr(0, str.indexOf("</head>")+7);
 	} else if (templates.length > 0) {
@@ -120,31 +170,38 @@ function loadTemps(envplates, templates, weldFunc, data, header_text) {
  * either sends objects + template list to client or builds DOM document from templates
  *
  * envplates :	all templates loaded for this app env
- * objs :		list of objects, with elements like  { selector.attribute: 'databasevalue' }
  * base_tpls :	list of template names (hashing envplates)
  *				if it's not an ajax call, these are immediately applied to boilerplate
  * tpls :		list of (skeletal) template names (hashing envplates)
  *				if it's not an ajax call, these are embedded into the base 'plates.
  *				but, if it is ajah, we send this list of names,
- *					along with the objects that will be welded in them.
+ *				along with the objects that will be welded in them.
+ * objs :		list of objects, with elements like  { selector.attribute: 'databasevalue' }
+ * alt_bp :		an alternative boilerplate filename
  *
  * now, sometimes we're not filling templates, we're just sending a list of objects via ajaj
  * in that case, there's only 4 arguments. otherwise, there's also:
  *
  */
-function swxRespond(envplates, request, response, base_tpls, tpls, objs) {
+function swxRespond(envplates, request, response, base_tpls, tpls, objs, alt_bp) {
 	if (request.xhr) {
 		if (tpls) response.send(JSON.stringify({ objects:objs, templates:tpls }));
 		else response.send(JSON.stringify(objs));
 	} else {
-		loadTemps(envplates, base_tpls.slice(0), function(data, headtext) {
-			if (!tpls) tpls = [];
-			loadTemps(envplates, tpls.slice(0), function(data) {
-				weldTemps(tpls.slice(0), objs, data, function(responsetxt) {
-					response.send(headtext + responsetxt);
-				});
-			}, data);
-		});
+		try {
+			loadTemps(envplates, base_tpls.slice(0), function(data, headtext) {
+				if (!tpls) tpls = [];
+				loadTemps(envplates, tpls.slice(0), function(data) {
+					weldTemps(tpls.slice(0), objs, data, function(responsetxt) {
+						response.send(headtext + responsetxt);
+					});
+				}, data);
+			}, alt_bp);
+		} catch (e) {
+			console.log('error filling templates:');
+			console.log(e);
+			response.send("Error. " + e);
+		}
 	}
 }
 
