@@ -3,7 +3,7 @@
 <!-- paulirish.com/2008/conditional-stylesheets-vs-css-hacks-answer-neither/ --> 
 <!--[if lt IE 7 ]> <html lang="en" class="no-js ie6"> <![endif]-->
 <!--[if IE 7 ]>    <html lang="en" class="no-js ie7"> <![endif]-->
-<!--[if IE 8 ]>    <html lang="en" class="no-js ie8"> <![endif]-->
+<!--[if IE 8 ]>    <html lang="en" class="no-js ie9"> <![endif]-->
 <!--[if IE 9 ]>    <html lang="en" class="no-js ie9"> <![endif]-->
 <!--[if (gt IE 9)|!(IE)]><!--> <html lang="en" class="no-js"> <!--<![endif]-->
 <head>
@@ -11,16 +11,17 @@
   <!--	All JavaScript at the bottom, except for :
 		this crazy nonsense which decides whether to rewrite the url -->
   <script type="text/javascript" language="javascript">
-	p = window.location.pathname;
-	h = window.location.hash;
+	p = String(window.location.pathname);
+	h = String(window.location.hash);
 	host = window.location.host;
 	prot = window.location.protocol;
-	if (h[0] == '#') h=h.substring(1);
-	if (p[0] == '/') p=p.substring(1);
+	while (h.charAt(0) == '#') h=h.substring(1);
+	while (p.charAt(0) == '/') p=p.substring(1);
 	if (p.length) {
 		if (!h.length) h = '/'+p;
 		window.location.href = prot + '//' + host + '/#' + h;
-	}
+	} else if (!h.length)
+		window.location.href = prot + '//' + host + '/#/';
   </script>
 
   <!-- and Modernizr, which sets css flags to enable HTML5 elements & feature detects -->
