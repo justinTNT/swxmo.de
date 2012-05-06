@@ -11,17 +11,20 @@
   <!--	All JavaScript at the bottom, except for :
 		this crazy nonsense which decides whether to rewrite the url -->
   <script type="text/javascript" language="javascript">
-	p = String(window.location.pathname);
-	h = String(window.location.hash);
-	host = window.location.host;
-	prot = window.location.protocol;
-	while (h.charAt(0) == '#') h=h.substring(1);
-	while (p.charAt(0) == '/') p=p.substring(1);
-	if (p.length) {
-		if (!h.length) h = '/'+p;
-		window.location.href = prot + '//' + host + '/#' + h;
-	} else if (!h.length)
-		window.location.href = prot + '//' + host + '/#/';
+		p = String(window.location.pathname);
+		h = String(window.location.hash);
+		host = window.location.host;
+		prot = window.location.protocol;
+		while (h.charAt(0) == '#') h=h.substring(1);
+		while (p.charAt(0) == '/') p=p.substring(1);
+		if (p.indexOf('.') < 0) { // wanna be able to load resources without ajax
+			if (p.length) {
+				if (!h.length) h = '/'+p;
+				else h=p;
+				window.location.href = prot + '//' + host + '/#' + h;
+			} else if (!h.length)
+				window.location.href = prot + '//' + host + '/#/';
+		}
   </script>
 
   <!-- and Modernizr, which sets css flags to enable HTML5 elements & feature detects -->
@@ -52,7 +55,7 @@
   <!-- Uncomment if you are specifically targeting less enabled mobile browsers
   <link rel="stylesheet" media="handheld" href="css/handheld.css?v=2">  -->
  
-  <link rel="stylesheet" href="/browser/{{APP}}.css">
+  <link rel="stylesheet" href="/{{APP}}.css">
 
 </head>
 
@@ -68,8 +71,9 @@
 		in development, include script.js separately from plugins.js (built from libs, swxmod and schema)
 		in production, just include the final compiled version : compiled.js
 	-->
+
   <script src="/browser/plugins.js"></script>
-  <script src="/browser/script.js"></script>
+  <script src="/{{APP}}.js"></script>
   
   <!--[if lt IE 7 ]>
     <script src="{{STATIC}}js/dd_belatedpng.js"></script>

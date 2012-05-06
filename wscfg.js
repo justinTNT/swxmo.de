@@ -15,7 +15,7 @@ options.clandestine="You'll>never<guess,";
 // map domain names to app names.
 
 options.apps = [	{ dname:'la.rrak.in', appname:'static' }
-				  , { dname:'larrak.in', appname:'justat' }
+				  , { dname:'larrak.in', appname:'larrakia' }
 	];
 
 
@@ -25,8 +25,8 @@ options.apps = [	{ dname:'la.rrak.in', appname:'static' }
 
 options.server_port=80;	// default http
 options.proxy_port=6780; 
-options.proxy_name='';
-options.proxies = [];
+options.proxy_name='larak.in';
+options.proxies = [ 'la.rrak.in', 'larrak.in' ];
 
 
 exports.options = options;

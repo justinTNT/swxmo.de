@@ -1,6 +1,9 @@
+var	os = require('os')
 var net = require('net');
 var http = require('http');
 var express = require('express');
+var mongoose = require('mongoose');
+
 var temptools = require('./temptools');
 
 var webserver_app;
@@ -17,15 +20,36 @@ function configureAppEnv(e) {
 
 	temptools.configureTemplates(e);
 
-	e.app.get(/\/$/, function(req, res){				// this makes sure that ajax pages serve up the skeleton
-		e.respond(req, res, e.basetemps);
-	});
 	e.app.configure(function(){						// and this serves up some browser scripts, css, etc
 		e.app.use(express.staticCache());
 		e.app.use('/browser/', express.static(e.dir + '/browser/'));
+		e.app.use(express.bodyParser());
+		e.app.use(express.cookieParser());
+		e.app.use(express.session({ secret:os.hostname() + '_' + e.staticurl }));
+	});
+
+    e.app.get("/" + e.appname + ".css", function(req, res){
+		res.contentType('text/css');
+    	res.send(e.cssstring);
+	});
+    e.app.get("/" + e.appname + ".js", function(req, res){
+		res.contentType('text/javascript');
+    	res.send(e.scriptplatestring);
 	});
 
 	return e.app;
+}
+
+
+/*
+ * this makes sure that ajax pages serve up the skeleton	
+ * in the case of where there is nothing else to server at the route
+ * i.e. it's all built on the client by a script
+ */
+function setAppEnvRoot(a, e){
+	a.get(/\/$/, function(req, res){
+		e.respond(req, res, e.basetemps);
+	});
 }
 
 
@@ -46,17 +70,30 @@ var eachapp, e;
 	for (var l=applist.length-1; l>=0; l--) {
 		eachapp = require('../apps/' + applist[l].appname + '/' + applist[l].appname + '_app.js');
 		e=eachapp.env;
-		if (e) {
+		if (e) { // not static ...
 			e.appname = applist[l].appname;
 			e.url = applist[l].dname;
 			eachapp.app = configureAppEnv(e);
 
-			this_admin_app = configureAppEnv(require('./admin/admin')(e));
-			this_admin_app.use(express.bodyParser());
-			webserver_app.use(express.vhost("admin." + applist[l].dname, this_admin_app));
+			var this_admin = require('./admin/admin')(e);
+			var this_aapp = configureAppEnv(this_admin.env);
+			this_admin.setRoutes();
+			setAppEnvRoot(this_aapp, this_admin.env);
+			webserver_app.use(express.vhost("admin." + applist[l].dname, this_aapp));
+
+			e.db = mongoose.createConnection('mongodb://localhost/' + applist[l].appname);
+			for (i in e.plugins)
+				require('../common/' + e.plugins[i] + '/' + e.plugins[i] + '.js')(e);  // common routing (server script)
+
+			eachapp.setRoutes();
+			setAppEnvRoot(eachapp.app, e);
+
+			eachapp.app.use(express.static(__dirname+'/../apps/' + e.appname));
+			eachapp.app.use(express.favicon(__dirname+'/../apps/' + e.appname));
 		}
 		applist[l].app = eachapp.app;
 		webserver_app.use(express.vhost(applist[l].dname, applist[l].app));
+		webserver_app.use(express.vhost("www." + applist[l].dname, applist[l].app));
   	}
 
   webserver_app.use(express.logger());
@@ -142,17 +179,17 @@ function getProxy(name, port, clandestine, proxies) {
 		c.write(clandestine);
 	});
 	c.on('end', function(e){
-		console.log('connection to proxy server ended.');
+		console.log('config connection to proxy server ended.');
 		c.end();
 	});
 	c.on('error', function(e){
-		console.log('connection to proxy server failed.');
+		console.log('config connection to proxy server failed.');
 		throw e;
 	});
 }
 
 function setProxy(port, ip) {
-	proxies = [];
+	var prollyproxy = {};
 	// listen to port.
 	// when someone connects, match their IP to the nominated list of hosts to serve for them
 	// so that anything that comes to a vhost can be sent back to them as required

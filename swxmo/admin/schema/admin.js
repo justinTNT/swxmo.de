@@ -4,7 +4,7 @@ var Schema = mongoose.Schema;
 var ObjectId = Schema.ObjectId;
 
 var swxmodeadminSchema = new Schema({
-    name    : String			// display name
+    name	: String			// display name
   , login	: String			// login name
   , passwd	: String			// password - TODO : hash
   , appname	: String			// appname, or blank for all ...

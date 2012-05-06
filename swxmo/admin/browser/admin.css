@@ -130,6 +130,17 @@ div.context-field {
 	margin-top: 2px;
 }
 
+
+div#refreshbutt {
+    background-image:url('/browser/images/refreshbutt.gif');
+    position:absolute;
+    left:50%;
+    top:5px;
+    height:23px;
+    width:23px;
+    display:none;
+}
+
 div#plus-menu {
 	background-color: #EEE8D5;
 	position: absolute;

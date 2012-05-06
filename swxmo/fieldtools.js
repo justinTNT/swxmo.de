@@ -32,6 +32,45 @@ var just_fields = [];
 }
 
 
+function eachTxlate(eachd, fields) {
+	var len=fields.length;
+	var next_obj={};
+	if (len) {
+			
+		for (var i=0; i<len; i++) {
+			next_field = fields[i];
+			if (_.isString(next_field)) {
+				if (_.isString(eachd))
+					next_obj[next_field] = eachd;
+				else next_obj[next_field] = eachd[next_field];
+			} else {
+				for (key in next_field) {
+					var v = next_field[key];
+					if (_.isString(eachd))	// distinct queries just return strings
+						next_obj[v] = eachd;
+					else if (! _.isUndefined(eachd[key]))	// deref fieldname?
+						next_obj[v] = eachd[key];
+					else {
+						try {
+							next_obj[v] = eachd.get(key);
+						} catch(e) {
+							console.log('error getting ' + key);
+						}
+					} 			// maybe it's virtual ...
+				}
+			}
+		}
+	} else {
+		for (key in fields)
+			if (! _.isUndefined(eachd[key])) {
+				next_obj[key] = eachd[key];
+			}
+	}
+
+	return next_obj;
+}
+
+
 /*
  * translateFields
  * ===============
@@ -42,37 +81,14 @@ var just_fields = [];
 function translateFields(d, fields) {
 var objs=[];
 
-	d.forEach(function(eachd){
-		var len=fields.length;
-		var next_obj={};
-		if (len) {
-				
-			for (var i=0; i<len; i++) {
-				next_field = fields[i];
-				if (_.isString(next_field)) {
-					if (_.isString(eachd))
-						next_obj[next_field] = eachd;
-					else next_obj[next_field] = eachd[next_field];
-				} else {
-					for (key in next_field) {
-						var v = next_field[key];
-						if (_.isString(eachd))	// distinct queries just return strings
-							next_obj[v] = eachd;
-						else if (! _.isUndefined(eachd[key]))	// deref fieldname?
-							next_obj[v] = eachd[key];
-						else next_obj[v] = eachd.get(key);			// maybe it's virtual ...
-					}
-				}
-			}
-		} else {
-			for (key in fields)
-				if (! _.isUndefined(eachd[key])) {
-					next_obj[key] = eachd[key];
-				}
-		}
-
-		objs.push(next_obj);
-	});
+	if (typeof d === 'undefined') {
+		console.log('no documents to translate');
+	} else {
+		if (! d.length) d = [d];
+		d.forEach(function(eachd){
+			objs.push(eachTxlate(eachd, fields));
+		});
+	}
 
 	return objs;
 }

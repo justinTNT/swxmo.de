@@ -6,7 +6,6 @@ var Guest;
  * 		or   empty string (if password doesn't match)
  */
 function authenticate(name, pass, cb) {
-//	var Guest = thism.model(guest);
 	Guest.find({handle:name}, function(err, docs) {
 		if (err) throw err;
 		if (docs.length == 0) {
@@ -26,7 +25,6 @@ function authenticate(name, pass, cb) {
  * 		or   empty string (if password doesn't match)
  */
 function validateNewRego(name, email, cb) {
-//	var Guest = thism.model(guest);
 	Guest.find({handle:name}, function(err, docs) {
 		if (err) throw err;
 		if (docs.length == 0) {
@@ -55,14 +53,11 @@ function requiresLogin(req, res, next) {
 
 
 
-
-
-
-module.exports = function(mong, env) {
+module.exports = function(env) {
 
 	var crypto = require('crypto');
 	var guest = require('./schema/guest').name;
-	Guest = mong.model(guest);
+	Guest = env.db.model(guest);
 
 	var mailer = require('nodemailer');
 	mailer.SMTP = {
@@ -225,7 +220,7 @@ module.exports = function(mong, env) {
 				mailer.send_mail( {
 						sender: 'accounts@justat.in',
 						to:req.body.email,
-						subject:'Please confirm your account at justat.in',
+						subject:'Please confirm your account',
 						html: "<p>Click on this link to verify your account:<br>"
 							+ "<a href='" + env.url + "/confirm/" + req.body.login + "/" + encoded + "'>"
 							+ env.url + "/confirm/" + req.body.login + "/" + encoded + "</a>"

@@ -31,7 +31,7 @@ console.log('hostnames- list of hostnames served by proxy');
 
 if (wscfg.proxy_name)
         wserver.getProxy(wscfg.proxy_name, wscfg.proxy_port, wscfg.clandestine, wscfg.proxies);
-else wserver.setProxy(wscfg.proxy_port, wscfg.ip);
+else wserver.setProxy(wscfg.proxy_port, wscfg.ip, wscfg.clandestine);
 
 wserver.setupServer(wscfg.server_port, wscfg.apps, wscfg.ip);
 

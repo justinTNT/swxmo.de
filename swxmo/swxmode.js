@@ -1,3 +1,8 @@
+/*
+ * swxmode.js
+ * =======
+ * this is the code which is loaded both in the client and the server in order to weld data to templates
+ */
 
 if (typeof $ == 'undefined') {
 var jsdom = require('jsdom')
@@ -5,6 +10,29 @@ var jsdom = require('jsdom')
   $ = require('jquery').create(myWindow);
   _ = require('underscore');
 }
+
+
+
+
+/* 
+ * this is because of the weird behaviour in firefox,
+ * when setting innerHTML on a block element inside an anchor creates a new namespace anchor inside the block.
+ * I guess we should avoid those style errors, but every other browser manages it, so I'm dodgying it up for firefox
+ * this assumes that if we're filling an elemnt inside an anchor, it's only text anyway ...
+ * we are calling html because of the html often loaded from rich text editors
+ */
+function setItem($i, str) {
+    $i.html(str);
+
+    if ($.browser.mozilla) {
+        var tmp = $i.html();
+        if (tmp.substr(0, 9) == '<a xmlns=') {
+            $i.text(str);
+        }
+    }
+}
+
+
 
 
 /*
@@ -15,7 +43,7 @@ var jsdom = require('jsdom')
  */
 function weldItem (dat, selection) {
 	if (typeof dat == 'string') {
-		selection.html(dat);
+		setItem(selection,dat);
 	} else {
 		for (keyatt in dat) {
 		var tmpa = keyatt.split('.')
@@ -59,7 +87,7 @@ function weldItem (dat, selection) {
 					tmpstyle = $item.attr('style') || "";
 					$item.attr('style', styl + ':' + str + ';' + tmpstyle);
 				} else if (attrib) $item.attr(attrib, str);
-				else $item.html(str);
+				else setItem($item,str);
 			}
 		}
 	}
@@ -80,8 +108,11 @@ function weldTemps(templates, objects, data, sendEmOff) {
 	} else {
 		var nt = templates.pop();
 		var select = nt.selector;
-		var $selected = data.find(select);
-		if (! $selected.length) throw "bad selector " + select;
+		var $selected = data;
+		if (! $selected.is(select))
+			$selected = data.find(select);
+		if (! $selected.length)
+            throw "bad selector " + select;
 
 		for (var sel in objects) {
 			var dat, l, $s;
@@ -132,10 +163,16 @@ function weldTemps(templates, objects, data, sendEmOff) {
  * we commonly call loadTemps with 3 parameters.
  * It then loads the default boilerplate into a DOM instance,
  * and recursively calls itself, stepping through the templates in the second parameter.
+ *
  * BUT
- * we occassionally may call loadTemps with 4 parameters : the fourth (rare, optional) parameter being an alternative boilerplate filename
- * When loadTemps calls itself, it passes on the DOM it is building as the fourth parameter, and the HTML up to the end of the head as the fifth.
- * We need to carry around that string, because of some misbehaviour of jsdom which I can't quite remember right now, which munged the head along the way ...
+ *
+ * we occassionally may call loadTemps with 4 parameters :
+ * 	the fourth (rare, optional) parameter being an alternative boilerplate filename
+ *
+ * When loadTemps calls itself, it passes on the DOM it is building as the fourth parameter,
+ * and the HTML up to the end of the head as the fifth.
+ * We need to carry around that string, because of some misbehaviour of jsdom which I can't quite remember right now,
+ * which munged the head along the way ...
  */
 function loadTemps(envplates, templates, weldFunc, data, header_text) {
 var hash=null; // boilerplate hash (filename)
@@ -152,8 +189,11 @@ var hash=null; // boilerplate hash (filename)
 		header_text = str.substr(0, str.indexOf("</head>")+7);
 	} else if (templates.length > 0) {
 		var next_template = templates.shift();
-		var $selected = data.find(next_template.selector);
-		if (! $selected.length) throw "bad selector " + next_template.selector;
+		var $selected = data;
+		if (! $selected.is(next_template.selector))
+			$selected = data.find(next_template.selector);
+		if (! $selected.length)
+            throw "bad selector " + next_template.selector;
 		$selected.each(function(){ $(this).html(envplates[next_template.filename]); });
 	} else {
 		return weldFunc(data, header_text);		// if there's no templates left, weld the data on
@@ -177,16 +217,20 @@ var hash=null; // boilerplate hash (filename)
  *				but, if it is ajah, we send this list of names,
  *				along with the objects that will be welded in them.
  * objs :		list of objects, with elements like  { selector.attribute: 'databasevalue' }
- * alt_bp :		an alternative boilerplate filename
+ * alt_bp :		[OPTIONAL] alternative boilerplate filename
  *
  * now, sometimes we're not filling templates, we're just sending a list of objects via ajaj
  * in that case, there's only 4 arguments. otherwise, there's also:
  *
  */
 function swxRespond(envplates, request, response, base_tpls, tpls, objs, alt_bp) {
+var o;
+
 	if (request.xhr) {
-		if (tpls) response.send(JSON.stringify({ objects:objs, templates:tpls }));
-		else response.send(JSON.stringify(objs));
+		if (tpls) {
+			o = {objects:objs, templates:tpls};
+			response.send(JSON.stringify(o));
+		} else response.send(JSON.stringify(objs));
 	} else {
 		try {
 			loadTemps(envplates, base_tpls.slice(0), function(data, headtext) {
@@ -205,7 +249,7 @@ function swxRespond(envplates, request, response, base_tpls, tpls, objs, alt_bp)
 	}
 }
 
-if (!_.isUndefined(exports)) {
+if (typeof exports != 'undefined') {
 	exports.respond = swxRespond;
 }
 

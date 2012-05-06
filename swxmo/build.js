@@ -19,7 +19,7 @@ var	AdminFields = admdb.model('SWXadmFields');
 var	fs = require('fs');
 var	ofd;
 
-var	appname, appdir;
+var	appname, appdir, commondir;
 var rejig_db;
 
 
@@ -91,7 +91,7 @@ function addFields(app, tab, fields, cnt, cb) {
 		cnt++;
 		nf = fields.shift();
 		addAdField(app, tab, nf, cnt, function(){ addFields(app, tab, fields, cnt, cb); });
-	} else cb();
+	} else if (cb) cb();
 }
 
 
@@ -100,17 +100,18 @@ function addFields(app, tab, fields, cnt, cb) {
  * already derived from the schema directory
  */
 function load_schema (dirname, filename, cb) {
-	modelname = require(dirname + '/' + filename);
-	thech = modelname;
+var fields = []
+  ,	modelname = require(dirname + '/' + filename)
+  , thech = modelname;
 
 	thech=thech.schema.tree;
 	filename = filename.substr(0, filename.indexOf('.'));
 
+	for (key in thech)
+		fields.push(key);
+
 	// falls thru, unless rejig is set to all
 	wipeAdFields(appname, filename, function() {
-		var fields = [];
-		for (key in thech)
-			fields.push(key);
 		addFields(appname, filename, fields, 0, cb);
 	});
 }
@@ -149,11 +150,12 @@ function eachfile(dirname, files, cb, fcb) {
  * iterate through the list, calling cb with the name of each file,
  * then calling fcb once they're all processed
  */
-function touch_file(dirname, files, cb, fcb) {
+function touch_file(dirname, files, op, fcb) {
 	fn = files.shift();
 	if (fn) {
-		cb(fn);
-		touch_file(dirname, files, cb, fcb);
+		op(fn, function() {
+			touch_file(dirname, files, op, fcb);
+		});
 	} else if (fcb) fcb();
 }
 
@@ -176,16 +178,16 @@ function read_dir (dirname, cb, fcb) {
 /*
  * similar : get the list of files found in the named directory,
  * and pass on for processing.
- * cb is passed the name of each file,
+ * op is passed the name of each file, and a continuation callback
  * fcb is called when we're all done
  */
-function touch_dir (dirname, cb) {
+function touch_dir (dirname, op, fcb) {
 	fs.readdir(dirname, function(err, files){
 		if (err) {
 			console.log('failed to read : ' + dirname);
 			throw err;
 		}
-		touch_file(dirname, files, cb);
+		touch_file(dirname, files, op, fcb);
 	});
 }
 
@@ -223,14 +225,28 @@ function ensureAdminAccess(cb) {
  * while testing, default behaviour is to clear all entries and rebuild.
  * TTD: we might want to take command line parameters to specify to only add fields for those schema not already there
  */
-function ensureAdFieldCfg(cb) {
-	var dn = appdir + '/schema';
-	touch_dir(dn,
-		function(fn){
-			load_schema(dn, fn, function(){
-				if (cb) cb();
-			});
-		});
+function ensureAdFieldCfg(dname, cb) {
+	var i, dn = dname + '/schema';
+	touch_dir ( dn
+				, function(fn, cb){ load_schema(dn, fn, cb); }
+				, function(){
+					if (dname == appdir) {
+						e = require(appdir + '/' + appname + '_app.js');
+						if (e.env.plugins.length) {
+							for (i in e.env.plugins) {
+								ensureAdFieldCfg(commondir + '/' + e.env.plugins[i]
+												, function(){
+													if (i == e.env.plugins.length-1)
+														cb();
+												});
+							}
+						} else {
+							cb();
+						}
+					} else {
+						cb();
+					}
+				} );
 }
 
 
@@ -246,13 +262,6 @@ rejig_db = process.argv[3];
 
 
 /*
- * this object holds all the skeleta for this app
- */
-
-var globswxmodeskeleta = {};
-
-
-/*
  * set the working directory for this app
  * note this same build is also used to give us the admin -
  * but don't rebuild admin unless you're sure of what you're doing!
@@ -265,6 +274,7 @@ var globswxmodeskeleta = {};
  */
 
 appdir = __dirname;
+commondir = __dirname + '/../common';
 if (appname == 'admin')
 	appdir += '/admin';
 else appdir += '/../apps/' + appname;
@@ -274,17 +284,8 @@ ofd = fs.openSync(appdir + '/browser/plugins.js', 'w');
 
 /*
  * this call builds the javascript file for the browser
- * TODO: send to a file rather than console
- * (come back with a good flow control library to tidy this up)
  */
 
-read_dir(appdir + '/templates/skeleta',
-	function(fn, txt) {
-		txt = txt.replace(/[\t\n\r]/g, ' ');
-		txt = txt.replace(/'/g, "\\'");
-		globswxmodeskeleta[fn] = txt;
-	},
-	function(){
 		var libd = __dirname+'/browserlibs';
 		var jqd = __dirname+'/jquery';
 		fs.readdir(jqd, function(err, files){
@@ -302,9 +303,6 @@ read_dir(appdir + '/templates/skeleta',
 					eachfile(libd, files
 							, function(fn, str){ writeStr2File(str); }
 							, function(){
-								txt = JSON.stringify(globswxmodeskeleta);
-								txt = txt.replace(/\\\\\'/g, "\\'");
-								writeStr2File("var swxmodeskeleta = JSON.parse(\'" + txt + "\');");
 								read_dir(appdir + '/browser/libs',
 									function(fn, str){
 										writeStr2File(str);
@@ -322,8 +320,9 @@ read_dir(appdir + '/templates/skeleta',
 
 			});
 		});
-	});
-
+        /*
+	});             // commenting out the template stuff: that's dynamic now.
+*/
 
 /*
  * this section makes sure we have a super admin user in the database for this app
@@ -331,12 +330,12 @@ read_dir(appdir + '/templates/skeleta',
  */
 
 	if (appname == 'admin') {
-		ensureAdFieldCfg(function(){
+		ensureAdFieldCfg(appdir, function(){
 				setTimeout(function(){admdb.close();},123);
 		});
 	} else {
 		ensureAdminAccess(function() {
-			ensureAdFieldCfg(function(){
+			ensureAdFieldCfg(appdir, function(){
 				setTimeout(function(){admdb.close();},123);
 			})
 		});
